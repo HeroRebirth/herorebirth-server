@@ -3,16 +3,21 @@ package player
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/server"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/dungeon"
+	"hero-emulator/messaging"
+	"hero-emulator/nats"
+	"hero-emulator/npc"
+	"hero-emulator/server"
+	"hero-emulator/utils"
+
+	"github.com/robfig/cron"
 	"gopkg.in/guregu/null.v3"
 
 	"github.com/thoas/go-funk"
@@ -28,6 +33,7 @@ var (
 	CHAT_MESSAGE  = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x00, 0x55, 0xAA}
 	SHOUT_MESSAGE = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x71, 0x0E, 0x00, 0x00, 0x55, 0xAA}
 	ANNOUNCEMENT  = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x71, 0x06, 0x00, 0x55, 0xAA}
+	EVENT_NOTICE  = utils.Packet{0xAA, 0x55, 0x00, 0x75, 0x01, 0x00, 0x80, 0xa1, 0x00, 0x55, 0xAA}
 )
 
 func (h *ChatHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
@@ -386,7 +392,111 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 
 			msg := strings.Join(parts[1:], " ")
 			makeAnnouncement(msg)
+		case "event":
+			if s.User.UserType < server.GAL_USER {
+				return nil, nil
+			}
 
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			return EVENT_NOTICE, nil
+		case "deleteitemslot":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			slotID, err := strconv.ParseInt(parts[1], 10, 16)
+			slotMax := int16(slotID)
+			if err != nil {
+				return nil, err
+			}
+			ch := s.Character
+			if len(parts) >= 3 {
+				chr, _ := database.FindCharacterByName(parts[2])
+				ch = chr
+			}
+			r, err := ch.RemoveItem(slotMax)
+			if err != nil {
+				return nil, err
+			}
+			ch.Socket.Write(r)
+		case "discitem":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 2 {
+				return nil, nil
+			}
+
+			itemID, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+
+			quantity := int64(1)
+			itemtype := int64(0)
+			judgestat := int64(0)
+			info := database.Items[itemID]
+			if info.Timer > 0 {
+				quantity = int64(info.Timer)
+			}
+			if len(parts) >= 3 {
+				quantity, err = strconv.ParseInt(parts[2], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if len(parts) >= 4 {
+				itemtype, err = strconv.ParseInt(parts[3], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if len(parts) >= 5 {
+				judgestat, err = strconv.ParseInt(parts[4], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+			}
+			ch := s.Character
+			if s.User.UserType >= server.HGM_USER {
+				if len(parts) >= 6 {
+					chID, err := strconv.ParseInt(parts[5], 10, 64)
+					if err == nil {
+						chr, err := database.FindCharacterByID(int(chID))
+						if err == nil {
+							ch = chr
+						}
+					}
+				}
+			}
+
+			item := &database.InventorySlot{ItemID: itemID, Quantity: uint(quantity), ItemType: int16(itemtype), JudgementStat: int64(judgestat)}
+
+			if info.GetType() == database.PET_TYPE {
+				petInfo := database.Pets[itemID]
+				expInfo := database.PetExps[petInfo.Level-1]
+				targetExps := []int{expInfo.ReqExpEvo1, expInfo.ReqExpEvo2, expInfo.ReqExpEvo3, expInfo.ReqExpHt, expInfo.ReqExpDivEvo1, expInfo.ReqExpDivEvo2, expInfo.ReqExpDivEvo3}
+				item.Pet = &database.PetSlot{
+					Fullness: 100, Loyalty: 100,
+					Exp:   uint64(targetExps[petInfo.Evolution-1]),
+					HP:    petInfo.BaseHP,
+					Level: byte(petInfo.Level),
+					Name:  "",
+					CHI:   petInfo.BaseChi}
+			}
+
+			r, _, err := ch.AddItem(item, -1, false)
+			if err != nil {
+				return nil, err
+			}
+			ch.Socket.Write(*r)
+			return nil, nil
 		case "item":
 			if s.User.UserType < server.HGM_USER {
 				return nil, nil
@@ -419,17 +529,25 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 					}
 				}
 			}
-
-			item := &database.InventorySlot{ItemID: itemID, Quantity: uint(quantity)}
 			info := database.Items[itemID]
+			if info.Timer > 0 {
+				quantity = int64(info.Timer)
+			}
+			item := &database.InventorySlot{ItemID: itemID, Quantity: uint(quantity)}
+			if len(parts) >= 3 {
+				quantity, err = strconv.ParseInt(parts[2], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+			}
 
 			if info.GetType() == database.PET_TYPE {
 				petInfo := database.Pets[itemID]
 				expInfo := database.PetExps[petInfo.Level-1]
-
+				targetExps := []int{expInfo.ReqExpEvo1, expInfo.ReqExpEvo2, expInfo.ReqExpEvo3, expInfo.ReqExpHt, expInfo.ReqExpDivEvo1, expInfo.ReqExpDivEvo2, expInfo.ReqExpDivEvo3}
 				item.Pet = &database.PetSlot{
 					Fullness: 100, Loyalty: 100,
-					Exp:   uint64(expInfo.ReqExpEvo1),
+					Exp:   uint64(targetExps[petInfo.Evolution-1]),
 					HP:    petInfo.BaseHP,
 					Level: byte(petInfo.Level),
 					Name:  petInfo.Name,
@@ -444,6 +562,74 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			ch.Socket.Write(*r)
 			return nil, nil
 
+		case "rank":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 2 {
+				return nil, nil
+			}
+
+			rankID, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			s.Character.HonorRank = rankID
+			s.Character.Update()
+			resp := database.CHANGE_RANK
+			resp.Insert(utils.IntToBytes(uint64(s.Character.PseudoID), 2, true), 6)
+			resp.Insert(utils.IntToBytes(uint64(s.Character.HonorRank), 4, true), 8)
+			statData, _ := s.Character.GetStats()
+			resp.Concat(statData)
+			s.Write(resp)
+		case "divine":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+			data, levelUp := s.Character.AddExp(233332051410)
+			if levelUp {
+				statData, err := s.Character.GetStats()
+				if err == nil && s.Character.Socket != nil {
+					resp.Concat(statData)
+				}
+			}
+			if s.Character.Socket != nil {
+				resp.Concat(data)
+			}
+			s.Character.Class = 21
+			s.Character.Update()
+			gomap, _ := s.Character.ChangeMap(14, nil)
+			resp.Concat(gomap)
+			x := "261,420"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			resp.Concat(coord)
+			return resp, nil
+		case "class":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 3 {
+				return nil, nil
+			}
+
+			id, _ := strconv.Atoi(parts[1])
+			c, err := database.FindCharacterByID(int(id))
+			if err != nil {
+				return nil, err
+			}
+
+			t, err := strconv.Atoi(parts[2])
+			if err != nil {
+				return nil, err
+			}
+			c.Class = t
+			c.Update()
+			resp := utils.Packet{}
+			resp = npc.JOB_PROMOTED
+			resp[6] = byte(c.Class)
+			return resp, nil
 		case "gold":
 			if s.User.UserType < server.HGM_USER {
 				return nil, nil
@@ -537,14 +723,31 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			}
 
 			return nil, nil
+		case "petexp":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
 
-		case "home":
-			data, err := s.Character.ChangeMap(s.Character.Map, nil)
+			if len(parts) < 2 {
+				return nil, nil
+			}
+
+			amount, err := strconv.ParseUint(parts[1], 10, 64)
 			if err != nil {
 				return nil, err
 			}
+			slots, err := s.Character.InventorySlots()
+			if err != nil {
+				log.Println(err)
+				return nil, nil
+			}
 
-			resp.Concat(data)
+			petSlot := slots[0x0A]
+			pet := petSlot.Pet
+			if pet == nil || petSlot.ItemID == 0 || !pet.IsOnline {
+				return nil, nil
+			}
+			pet.AddExp(s.Character, amount)
 
 		case "map":
 			if s.User.UserType < server.GM_USER {
@@ -576,7 +779,23 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			}
 
 			return s.Character.ChangeMap(int16(mapID), nil)
+		case "buff":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
 
+			if len(parts) < 3 {
+				return nil, nil
+			}
+			infectionID, err := strconv.ParseUint(parts[1], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			duration, err := strconv.ParseUint(parts[1], 10, 32)
+			if err != nil {
+				return nil, err
+			}
+			s.Character.NewBuffInfection(int64(infectionID), int(duration))
 		case "cash":
 			if s.User.UserType < server.GM_USER {
 				return nil, nil
@@ -586,13 +805,14 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 				return nil, nil
 			}
 
-			amount, err := strconv.ParseInt(parts[1], 10, 64)
+			amount, err := strconv.ParseInt(parts[2], 10, 64)
 			if err != nil {
 				return nil, err
 			}
 
-			userID := parts[2]
-			user, err := database.FindUserByID(userID)
+			userID := parts[1]
+			user, err := database.FindUserByName(userID)
+
 			if err != nil {
 				return nil, err
 			} else if user == nil {
@@ -603,7 +823,270 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			user.Update()
 
 			return messaging.InfoMessage(fmt.Sprintf("%d nCash loaded to %s (%s).", amount, user.Username, user.ID)), nil
+		case "exprate":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
 
+			if len(parts) < 3 {
+				return nil, nil
+			}
+
+			if len(parts) > 2 {
+				if am, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					database.EXP_RATE = am
+
+				}
+				minute, err := strconv.ParseInt(parts[2], 10, 64)
+				if err != nil {
+					return nil, err
+
+				}
+				time.AfterFunc(time.Duration(minute)*time.Minute, func() {
+					database.EXP_RATE = database.DEFAULT_EXP_RATE
+				})
+			}
+			return messaging.InfoMessage(fmt.Sprintf("EXP Rate now: %f", database.EXP_RATE)), nil
+		case "droprate":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 3 {
+				return nil, nil
+			}
+			if len(parts) > 2 {
+				if s, err := strconv.ParseFloat(parts[1], 64); err == nil {
+					database.DROP_RATE = s
+				}
+				minute, err := strconv.ParseInt(parts[2], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				time.AfterFunc(time.Duration(minute)*time.Minute, func() {
+					database.DROP_RATE = database.DEFAULT_DROP_RATE
+				})
+			}
+			return messaging.InfoMessage(fmt.Sprintf("Drop Rate now: %f", database.DROP_RATE)), nil
+
+		case "addguild":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			guildid, err := strconv.ParseInt(parts[1], 10, 32)
+			if err != nil {
+				return nil, err
+			}
+			ch := s.Character
+			if len(parts) >= 3 {
+				c, err := database.FindCharacterByName(parts[2])
+				if err != nil {
+					return nil, err
+				}
+				ch = c
+			}
+			removeid := -1
+			if int(guildid) == removeid {
+				guild, err := database.FindGuildByID(ch.GuildID)
+				err = guild.RemoveMember(ch.ID)
+				if err != nil {
+					return nil, err
+				}
+				go guild.Update()
+				ch.GuildID = int(guildid)
+			} else {
+				guild, err := database.FindGuildByID(int(guildid))
+				if err != nil {
+					return nil, err
+				}
+				guild.AddMember(&database.GuildMember{ID: ch.ID, Role: database.GROLE_MEMBER})
+				go guild.Update()
+				ch.GuildID = int(guildid)
+			}
+			spawnData, err := s.Character.SpawnCharacter()
+			if err == nil {
+				p := nats.CastPacket{CastNear: true, CharacterID: s.Character.ID, Type: nats.PLAYER_SPAWN, Data: spawnData}
+				p.Cast()
+				ch.Socket.Conn.Write(spawnData)
+			}
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("Player new guild id: %d", ch.GuildID)))
+			return resp, nil
+		case "findguild":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			guild, err := database.FindGuildByName(parts[1])
+			if err != nil {
+				return nil, err
+			}
+			return messaging.InfoMessage(fmt.Sprintf("Clan ID: %d", guild.ID)), nil
+		case "dungeon":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+			data, err := s.Character.ChangeMap(243, nil)
+			if err != nil {
+				return nil, err
+			}
+			resp.Concat(data)
+			x := "377,246"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			resp.Concat(coord)
+			return resp, nil
+		case "refresh":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			command := parts[1]
+			switch command {
+			case "items":
+				database.RefreshAllItems()
+			case "scripts":
+				database.RefreshScripts()
+			case "htshop":
+				database.RefreshHTItems()
+			case "buffinf":
+				database.RefreshBuffInfections()
+			case "advancedfusions":
+				database.RefreshAdvancedFusions()
+			case "gamblings":
+				database.RefreshGamblingItems()
+			case "craftitems":
+				database.RefreshCraftItem()
+			case "productions":
+				database.RefreshProductions()
+			case "drops":
+				database.RefreshAllDrops()
+			case "shopitems":
+				database.GetAllShopItems()
+			case "npc":
+				database.RefreshScripts()
+				database.GetAllNPCs()
+				database.GetAllNPCPos()
+			case "exp":
+				database.GetExps()
+			case "users":
+				database.RefreshUsers()
+			case "npcpos":
+				database.GetAllNPCPos()
+
+			case "all":
+				callBacks := []func() error{database.RefreshScripts, database.RefreshHTItems, database.RefreshBuffInfections, database.RefreshAdvancedFusions,
+					database.RefreshGamblingItems, database.RefreshCraftItem, database.RefreshProductions, database.RefreshAllDrops, database.GetExps}
+				for _, cb := range callBacks {
+					if err := cb(); err != nil {
+						fmt.Println("Error: ", err)
+					}
+				}
+			}
+		case "charinfo":
+			if s.User.UserType < server.GM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			c, err := database.FindCharacterByName(parts[1])
+			if err != nil {
+				return nil, err
+			}
+
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("%s player details:", c.Name)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("CharID: %d | UserName: %s", c.Socket.Character.ID, c.Socket.User.Username)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("Map: %d | Location: %s", c.Map, c.Coordinate)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("Level: %d | Exp: %d", c.Level, c.Exp)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprint("Gold: ", c.Gold)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprint("Bank Gold: ", c.Socket.User.BankGold)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprint("Ncash: ", c.Socket.User.NCash)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("AID: %d | AID-enabled:%t", c.AidTime, c.AidMode)))
+			resp.Concat(messaging.InfoMessage(fmt.Sprint("SkillPoints: ", c.Socket.Skills.SkillPoints)))
+
+		case "number":
+			if len(parts) < 2 && s.Character.GeneratedNumber != 2 {
+				return nil, nil
+			}
+			number, err := strconv.ParseInt(parts[1], 10, 32)
+			if err != nil {
+				return nil, err
+			}
+			if int(number) == s.Character.GeneratedNumber {
+				s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("You guessed right, Show the boss your power.")))
+				s.Character.DungeonLevel++
+			} else {
+				s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("You guessed poorly, survive & slay again!")))
+				dungeon.MobsCreate([]int{40522}, s.User.ConnectedServer)
+				s.Character.CanTip = 3
+			}
+		case "addmobs":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 3 {
+				return nil, nil
+			}
+			npcId, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			count, err := strconv.ParseInt(parts[2], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			mapID := s.Character.Map
+			cmdSpawnMobs(int(count), int(npcId), int(mapID), s.Character.Coordinate)
+		case "resetallmobs":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+
+			for _, npcPos := range database.NPCPos {
+				npc, ok := database.NPCs[npcPos.NPCID]
+				if !ok {
+					fmt.Println("Error")
+					continue
+				}
+				for k := 1; k <= 4; k++ {
+					for i := 0; i < int(npcPos.Count); i++ {
+						if npc.ID == 0 || npcPos.IsNPC || !ok || !npcPos.Attackable {
+							continue
+						}
+						minCoordinate := database.ConvertPointToLocation(npcPos.MinLocation)
+						maxCoordinate := database.ConvertPointToLocation(npcPos.MaxLocation)
+						targetX := utils.RandFloat(minCoordinate.X, maxCoordinate.X)
+						targetY := utils.RandFloat(minCoordinate.Y, maxCoordinate.Y)
+						target := utils.Location{X: targetX, Y: targetY}
+						newai := &database.AI{ID: len(database.AIs), HP: npc.MaxHp, Map: npcPos.MapID, PosID: npcPos.ID, RunningSpeed: float64(3), Server: k, WalkingSpeed: float64(3), Faction: npcPos.Faction}
+						server.GenerateIDForAI(newai)
+						newai.OnSightPlayers = make(map[int]interface{})
+						newai.Coordinate = target.String()
+						uploadAI := &database.AI{ID: len(database.AIs), PosID: npcPos.ID, Server: k, Faction: npcPos.Faction, Map: npcPos.MapID, Coordinate: newai.Coordinate, WalkingSpeed: float64(3), RunningSpeed: float64(3)}
+						//fmt.Println(newai.Coordinate)
+						aierr := uploadAI.Create()
+						if aierr != nil {
+							fmt.Println("Error: %s", aierr)
+						}
+						newai.Handler = newai.AIHandler
+						database.AIsByMap[newai.Server][npcPos.MapID] = append(database.AIsByMap[newai.Server][npcPos.MapID], newai)
+						database.AIs[newai.ID] = newai
+						fmt.Println("New mob created", len(database.AIs))
+						go newai.Handler()
+					}
+				}
+			}
+			fmt.Println("Finished")
+			return nil, nil
 		case "mob":
 			if s.User.UserType < server.GAL_USER {
 				return nil, nil
@@ -631,7 +1114,6 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			minLoc := database.ConvertPointToLocation(npcPos.MinLocation)
 			maxLoc := database.ConvertPointToLocation(npcPos.MaxLocation)
 			loc := utils.Location{X: utils.RandFloat(minLoc.X, maxLoc.X), Y: utils.RandFloat(minLoc.Y, maxLoc.Y)}
-
 			ai.Coordinate = loc.String()
 			fmt.Println(ai.Coordinate)
 			ai.Handler = ai.AIHandler
@@ -641,6 +1123,16 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 
 			database.AIsByMap[ai.Server][npcPos.MapID] = append(database.AIsByMap[ai.Server][npcPos.MapID], ai)
 			database.AIs[ai.ID] = ai
+
+		case "droplog":
+			if s.User.UserType < server.GAL_USER {
+				return nil, nil
+			}
+			resp.Concat(messaging.InfoMessage(fmt.Sprintf("Today farmed relics: %d ea", len(database.RelicsLog))))
+			for _, c := range database.RelicsLog {
+				hour, min, sec := c.DropTime.Time.Hour(), c.DropTime.Time.Minute(), c.DropTime.Time.Second()
+				resp.Concat(messaging.InfoMessage(fmt.Sprintf("Character ID: %d dropped item id: %d at %d:%d:%d ", c.CharID, c.ItemID, hour, min, sec)))
+			}
 
 		case "relic":
 			if s.User.UserType < server.HGM_USER {
@@ -784,7 +1276,7 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 
 			resp = messaging.InfoMessage(user.ID)
 
-		case "visibility":
+		case "inv":
 			if s.User.UserType < server.GAL_USER {
 				return nil, nil
 			}
@@ -792,9 +1284,20 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			if len(parts) < 2 {
 				return nil, nil
 			}
+			if parts[1] == "1" {
+				data := database.BUFF_INFECTION
+				data.Insert(utils.IntToBytes(uint64(70), 4, true), 6)     // infection id
+				data.Insert(utils.IntToBytes(uint64(99999), 4, true), 11) // buff remaining time
 
+				s.Conn.Write(data)
+			} else {
+				r := database.BUFF_EXPIRED
+				r.Insert(utils.IntToBytes(uint64(70), 4, true), 6) // buff infection id
+				r.Concat(data)
+
+				s.Conn.Write(r)
+			}
 			s.Character.Invisible = parts[1] == "1"
-
 		case "kick":
 			if s.User.UserType < server.GAL_USER {
 				return nil, nil
@@ -810,6 +1313,21 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			}
 
 			database.GetSocket(dumb.UserID).Conn.Close()
+
+		case "summon":
+			if s.User.UserType < server.GAL_USER {
+				return nil, nil
+			}
+
+			if len(parts) < 2 {
+				return nil, nil
+			}
+
+			c, err := database.FindCharacterByName(parts[1])
+			if err != nil {
+				return nil, err
+			}
+			return c.ChangeMap(s.Character.Map, database.ConvertPointToLocation(s.Character.Coordinate))
 
 		case "tp":
 			if s.User.UserType < server.GAL_USER {
@@ -847,7 +1365,43 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 			}
 
 			return s.Character.ChangeMap(c.Map, database.ConvertPointToLocation(c.Coordinate))
+		case "greatwar": // /greatwar [masodperc]
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+			if len(parts) < 2 {
+				return nil, nil
+			}
+			time, _ := strconv.ParseInt(parts[1], 10, 32)
+			database.CanJoinWar = true
+			database.StartWarTimer(int(time))
 
+		case "factionwar": //FACTION WAR MISI CSINÁLTA
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+			database.PrepareFactionWar()
+		case "autogreatwar":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+			c := cron.New()
+			c.AddFunc("@every 5h", func() {
+				database.CanJoinWar = true
+				database.StartWarTimer(int(600))
+			})
+			c.Start()
+			return messaging.InfoMessage(fmt.Sprintf("Auto Great War activated")), nil
+		case "autofactionwar":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+			c := cron.New()
+			c.AddFunc("@every 5h", func() {
+				database.PrepareFactionWar()
+			})
+			c.Start()
+			return messaging.InfoMessage(fmt.Sprintf("Auto Faction War activated")), nil
 		case "speed":
 			if s.User.UserType < server.GM_USER {
 				return nil, nil
@@ -942,7 +1496,25 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 
 			user.UserType = int8(role)
 			user.Update()
+		case "skillpoint":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
 
+			if len(parts) < 3 {
+				return nil, nil
+			}
+
+			character, err := database.FindCharacterByName(parts[1])
+			if err != nil {
+				return nil, err
+			}
+			num, err := strconv.Atoi(parts[2])
+			if err != nil {
+				return nil, err
+			}
+			character.Socket.Skills.SkillPoints += num
+			s.Conn.Write(character.GetExpAndSkillPts())
 		case "type":
 			if s.User.UserType < server.HGM_USER {
 				return nil, nil
@@ -983,4 +1555,65 @@ func countMaintenance(cd int) {
 	} else {
 		//os.Exit(0)
 	}
+}
+
+func cmdSpawnMobs(count, npcID, mapID int, coordinate string) {
+	for i := 0; i < int(count); i++ {
+
+		coordinate := database.ConvertPointToLocation(coordinate)
+		randomLocX := randFloats(coordinate.X, coordinate.X+30)
+		randomLocY := randFloats(coordinate.Y, coordinate.Y+30)
+
+		minX := randomLocX
+		minY := randomLocY
+		maxX := randomLocX + 25
+		maxY := randomLocY + 25
+		MinLocation := fmt.Sprintf("%.1f,%.1f", minX, minY)
+		MaxLocation := fmt.Sprintf("%.1f,%.1f", maxX, maxY)
+
+		npcPos := &database.NpcPosition{ID: len(database.NPCPos), NPCID: int(npcID), MapID: int16(mapID), Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: MinLocation, MaxLocation: MaxLocation}
+		database.NPCPos = append(database.NPCPos, npcPos)
+		npcPos.Create()
+		npc, _ := database.NPCs[npcID]
+
+		newai := &database.AI{ID: len(database.AIs), HP: npc.MaxHp, Map: int16(mapID), PosID: npcPos.ID, RunningSpeed: 10, Server: 1, WalkingSpeed: 5, Once: false}
+		newai.OnSightPlayers = make(map[int]interface{})
+
+		loc := utils.Location{X: randomLocX, Y: randomLocY}
+		npcPos.MinLocation = fmt.Sprintf("%.1f,%.1f", randomLocX, randomLocY)
+		npcPos.MaxLocation = fmt.Sprintf("%.1f,%.1f", maxX, maxY)
+		newai.Coordinate = loc.String()
+		fmt.Println(newai.Coordinate)
+		newai.Handler = newai.AIHandler
+		database.AIsByMap[newai.Server][newai.Map] = append(database.AIsByMap[newai.Server][newai.Map], newai)
+		database.DungeonsAiByMap[newai.Server][newai.Map] = append(database.AIsByMap[newai.Server][newai.Map], newai)
+		database.AIs[newai.ID] = newai
+		DungeonCount := database.DungeonsByMap[newai.Server][newai.Map] + 1
+		database.DungeonsByMap[newai.Server][newai.Map] = DungeonCount
+		fmt.Println("Mobs Count: ", DungeonCount)
+		server.GenerateIDForAI(newai)
+		newai.Create()
+		//ai.Init()
+		if newai.WalkingSpeed > 0 {
+			go newai.Handler()
+		}
+	}
+}
+func startGuildWar(sourceG, enemyG *database.Guild) []byte {
+	challengerGuild := sourceG
+	enemyGuild := enemyG
+	makeAnnouncement(fmt.Sprintf("%s has declare war to %s.", challengerGuild.Name, enemyGuild.Name))
+
+	return nil
+}
+
+func randFloats(min, max float64) float64 {
+	return min + rand.Float64()*(max-min)
+}
+
+func RemoveIndex(a []string, index int) []string {
+	a[index] = a[len(a)-1] // Copy last element to index i.
+	a[len(a)-1] = ""       // Erase last element (write zero value).
+	a = a[:len(a)-1]       // Truncate slice.
+	return a
 }

@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/utils"
 )
 
 type ListServersHandler struct {
@@ -15,7 +15,7 @@ var (
 
 func (lsh *ListServersHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
 
-	lsh.header = "Dragon"
+	lsh.header = "HnH - Hero"
 	return lsh.listServers(s)
 }
 

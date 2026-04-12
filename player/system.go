@@ -1,8 +1,8 @@
 package player
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/utils"
 )
 
 type CharacterMenuHandler struct {

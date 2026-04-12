@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 	gorp "gopkg.in/gorp.v1"
 )
 
 var (
-	Guilds = make(map[int]*Guild)
-	gMutex sync.RWMutex
+	Guilds    = make(map[int]*Guild)
+	GuildWars = make(map[int]*Guild)
+	gMutex    sync.RWMutex
 
 	GUILD_INFO = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x83, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
@@ -37,25 +39,29 @@ const (
 )
 
 type Guild struct {
-	ID            int             `db:"id" json:"id"`
-	LeaderID      int             `db:"leader_id" json:"leader_id"`
-	Name          string          `db:"name" json:"name"`
-	MemberCount   int16           `db:"member_count" json:"member_count"`
-	Members       json.RawMessage `db:"members" json:"members"`
-	Logo          []byte          `db:"logo" json:"logo"`
-	Description   string          `db:"description" json:"description"`
-	Announcement  string          `db:"announcement" json:"announcement"`
-	Faction       int16           `db:"faction" json:"faction"`
-	GoldDonation  uint64          `db:"gold_donation" json:"gold_donation"`
-	HonorDonation uint64          `db:"honor_donation" json:"honor_donation"`
-	Recognition   uint64          `db:"recognition" json:"recognition"`
-
-	mutex sync.RWMutex `db:"-"`
+	ID              int             `db:"id" json:"id"`
+	LeaderID        int             `db:"leader_id" json:"leader_id"`
+	Name            string          `db:"name" json:"name"`
+	MemberCount     int16           `db:"member_count" json:"member_count"`
+	Members         json.RawMessage `db:"members" json:"members"`
+	Logo            []byte          `db:"logo" json:"logo"`
+	Description     string          `db:"description" json:"description"`
+	Announcement    string          `db:"announcement" json:"announcement"`
+	Faction         int16           `db:"faction" json:"faction"`
+	GoldDonation    uint64          `db:"gold_donation" json:"gold_donation"`
+	HonorDonation   uint64          `db:"honor_donation" json:"honor_donation"`
+	Recognition     uint64          `db:"recognition" json:"recognition"`
+	challengerGuild *GuildWar       `db:"-" json:"-"`
+	EnemyGuild      *GuildWar       `db:"-" json:"-"`
+	mutex           sync.RWMutex    `db:"-"`
 }
 
 type GuildMember struct {
 	ID   int       `json:"id"`
 	Role GuildRole `json:"role"`
+}
+type GuildWar struct {
+	ID int `json:"id"`
 }
 
 func (g *Guild) Create() error {
@@ -78,6 +84,11 @@ func (g *Guild) Delete() error {
 
 	_, err := db.Delete(g)
 	return err
+}
+
+func (g *Guild) ClanWar(enemyG, sourceG *Guild) {
+	GuildWars[0] = sourceG
+	GuildWars[1] = enemyG
 }
 
 func (g *Guild) GetMembers() ([]*GuildMember, error) {

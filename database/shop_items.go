@@ -61,3 +61,21 @@ func getAllShopItems() error {
 
 	return nil
 }
+
+func GetAllShopItems() error {
+	var shopItems []*ShopItem
+	query := `select * from data.shop_items`
+
+	if _, err := db.Select(&shopItems, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getAllShopItems: %s", err.Error())
+	}
+
+	for _, s := range shopItems {
+		ShopItems[s.Type] = s
+	}
+
+	return nil
+}

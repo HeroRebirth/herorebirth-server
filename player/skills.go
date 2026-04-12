@@ -1,8 +1,8 @@
 package player
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/utils"
 )
 
 type (
@@ -11,8 +11,16 @@ type (
 	DowngradeSkillHandler        struct{}
 	DowngradePassiveSkillHandler struct{}
 	RemoveSkillHandler           struct{}
+	DivineUpgradeSkillHandler    struct{}
 	RemovePassiveSkillHandler    struct{}
 )
+
+func (h *DivineUpgradeSkillHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+	skillIndex := data[6]
+	slotIndex := data[7]
+	bookID := utils.BytesToInt(data[8:12], true)
+	return s.Character.DivineUpgradeSkills(int(skillIndex), int(slotIndex), bookID)
+}
 
 func (h *UpgradeSkillHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
 

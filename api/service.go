@@ -6,7 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
+	"hero-emulator/database"
+
 	"github.com/thoas/go-funk"
 	context "golang.org/x/net/context"
 	grpc "google.golang.org/grpc"

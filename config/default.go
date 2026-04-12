@@ -2,32 +2,31 @@ package config
 
 import (
 	"log"
-	"os"
 	"strconv"
 )
 
 var Default = &config{
 	Database: Database{
 		Driver:          "postgres",
-		IP:              os.Getenv("POSTGRES_HOST"),
+		IP:              "localhost",
 		Port:            getPort(),
-		User:            os.Getenv("POSTGRES_USER"),
-		Password:        os.Getenv("POSTGRES_PASSWORD"),
-		Name:            os.Getenv("POSTGRES_DB"),
-		ConnMaxIdle:     96,
-		ConnMaxOpen:     144,
-		ConnMaxLifetime: 10,
+		User:            "postgres",
+		Password:        "postgres",
+		Name:            "hero",
+		ConnMaxIdle:     500,
+		ConnMaxOpen:     300,
+		ConnMaxLifetime: 50,
 		Debug:           false,
-		SSLMode:         "require",
+		SSLMode:         "disable",
 	},
 	Server: Server{
-		IP:   os.Getenv("SERVER_IP"),
-		Port: 4510,
+		IP:   "127.0.0.1",
+		Port: 5310,
 	},
 }
 
 func getPort() int {
-	sPort := os.Getenv("POSTGRES_PORT")
+	sPort := "5432"
 	port, err := strconv.ParseInt(sPort, 10, 32)
 	if err != nil {
 		log.Fatalln(err)

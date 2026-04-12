@@ -12,6 +12,8 @@ var (
 	stats         = make(map[int]*Stat)
 	stMutex       sync.RWMutex
 	startingStats = map[int]*Stat{
+		50: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, //Beast Male
+		51: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, //Best Female
 		52: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Monk
 		53: {STR: 12, DEX: 12, INT: 6, HP: 90, MaxHP: 90, CHI: 30, MaxCHI: 30, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Male Blade
 		54: {STR: 11, DEX: 13, INT: 6, HP: 90, MaxHP: 90, CHI: 30, MaxCHI: 30, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Female Blade
@@ -19,6 +21,8 @@ var (
 		57: {STR: 14, DEX: 11, INT: 5, HP: 96, MaxHP: 96, CHI: 24, MaxCHI: 24, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Female Spear
 		59: {STR: 10, DEX: 18, INT: 2, HP: 84, MaxHP: 84, CHI: 36, MaxCHI: 36, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Dual Sword
 
+		60: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, //Divine Beast Male
+		61: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, //Divine Beast Female
 		62: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Divine Monk
 		63: {STR: 12, DEX: 12, INT: 6, HP: 90, MaxHP: 90, CHI: 30, MaxCHI: 30, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Divine Male Blade
 		64: {STR: 11, DEX: 13, INT: 6, HP: 90, MaxHP: 90, CHI: 30, MaxCHI: 30, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Divine Female Blade
@@ -26,6 +30,8 @@ var (
 		67: {STR: 14, DEX: 11, INT: 5, HP: 96, MaxHP: 96, CHI: 24, MaxCHI: 24, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Divine Female Spear
 		69: {STR: 10, DEX: 18, INT: 2, HP: 84, MaxHP: 84, CHI: 36, MaxCHI: 36, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Divine Dual Sword
 
+		70: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, //Darknes Beast Male
+		71: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, //Darknes Beast Female
 		72: {STR: 13, DEX: 12, INT: 8, HP: 72, MaxHP: 72, CHI: 48, MaxCHI: 48, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Dark Monk
 		73: {STR: 12, DEX: 12, INT: 6, HP: 90, MaxHP: 90, CHI: 30, MaxCHI: 30, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Dark Male Blade
 		74: {STR: 11, DEX: 13, INT: 6, HP: 90, MaxHP: 90, CHI: 30, MaxCHI: 30, HPRecoveryRate: 10, CHIRecoveryRate: 10}, // Dark Female Blade
@@ -75,12 +81,14 @@ type Stat struct {
 	WaterBuff       int `db:"water_buff"`
 	Fire            int `db:"fire"`
 	FireBuff        int `db:"fire_buff"`
+	NaturePoints    int `db:"nature_points"`
 }
 
 func (t *Stat) Create(c *Character) error {
 	t = startingStats[c.Type]
 	t.ID = c.ID
 	t.StatPoints = 4
+	t.NaturePoints = 0
 	t.Honor = 10000
 	return db.Insert(t)
 }
@@ -137,7 +145,8 @@ func (t *Stat) Calculate() error {
 
 	c.BuffEffects(&temp)
 	c.JobPassives(&temp)
-
+	c.ExpMultiplier = 1
+	c.DropMultiplier = 1
 	c.AdditionalDropMultiplier = 0
 	c.AdditionalExpMultiplier = 0
 	c.AdditionalRunningSpeed = 0
@@ -146,7 +155,7 @@ func (t *Stat) Calculate() error {
 	c.ItemEffects(&temp, 0x0B, 0x43)   // INV BUFFS1
 	c.ItemEffects(&temp, 0x155, 0x18D) // INV BUFFS2
 	c.ItemEffects(&temp, 397, 399)     // MARBLES(1-3)
-
+	c.RebornEffects(&temp)
 	//totalDEX := temp.DEX + temp.DEXBuff
 	totalWind := temp.Wind + temp.WindBuff
 	totalWater := temp.Water + temp.WaterBuff

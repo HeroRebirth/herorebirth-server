@@ -1,10 +1,12 @@
 package player
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"encoding/binary"
+
+	"hero-emulator/database"
+	"hero-emulator/messaging"
+	"hero-emulator/nats"
+	"hero-emulator/utils"
 )
 
 type (
@@ -16,16 +18,18 @@ type (
 	TacticalSpaceTPHandler   struct{}
 	InTacticalSpaceTPHandler struct{}
 	OpenLotHandler           struct{}
+	QuestHandler             struct{}
 	EnterGateHandler         struct{}
+	TravelToFiveClanArea     struct{}
 	SendPvPRequestHandler    struct{}
 	RespondPvPRequestHandler struct{}
 	TransferSoulHandler      struct{}
 )
 
 var (
-	FreeLotQuantities = map[int]int{10820001: 5, 10600033: 10, 10600036: 10, 17500346: 5, 10600057: 5}
-	PaidLotQuantities = map[int]int{92000001: 5, 92000011: 5, 10820001: 5, 17500346: 10, 10601023: 20, 10601024: 20, 10601007: 50, 10601008: 50, 10600057: 10,
-		17502966: 5, 17502967: 5, 243: 3}
+	FreeLotQuantities = map[int]int{2043: 1, 253: 1, 10600036: 1, 17500346: 5, 10600057: 5}
+	PaidLotQuantities = map[int]int{92000012: 1, 99002396: 1, 17300257: 1, 100080280: 1, 10601024: 1000, 10601023: 1000, 15200001: 1, 15200002: 1, 15710012: 1,
+		240: 1, 241: 1, 243: 3}
 
 	BATTLE_MODE         = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x43, 0x00, 0x55, 0xAA}
 	MEDITATION_MODE     = utils.Packet{0xAA, 0x55, 0x05, 0x00, 0x82, 0x05, 0x00, 0x55, 0xAA}
@@ -35,6 +39,8 @@ var (
 	SELECTION_CHANGED   = utils.Packet{0xAA, 0x55, 0x09, 0x00, 0xCF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
 	PVP_REQUEST         = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x2A, 0x01, 0x55, 0xAA}
 	PVP_STARTED         = utils.Packet{0xAA, 0x55, 0x0A, 0x00, 0x2A, 0x02, 0x55, 0xAA}
+	CLANCASTLE_MAP      = utils.Packet{0xaa, 0x55, 0x62, 0x00, 0xbb, 0x03, 0x05, 0x55, 0xAA}
+	CANNOT_MOVE         = utils.Packet{0xaa, 0x55, 0x04, 0x00, 0xbb, 0x02, 0x00, 0x00, 0x55, 0xaa}
 )
 
 func (h *BattleModeHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
@@ -50,6 +56,13 @@ func (h *BattleModeHandler) Handle(s *database.Socket, data []byte) ([]byte, err
 		return nil, err
 	}
 
+	return resp, nil
+}
+
+func (h *QuestHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+
+	QUEST_MENU := utils.Packet{0xaa, 0x55, 0x13, 0x00, 0x57, 0x02, 0x3d, 0x4e, 0x00, 0x00, 0xb0, 0x5c, 0x56, 0x3d, 0x01, 0x0d, 0x00, 0x00, 0x00, 0x14, 0x5d, 0x56, 0x3d, 0x55, 0xaa}
+	resp := QUEST_MENU
 	return resp, nil
 }
 
@@ -81,10 +94,90 @@ func (h *TargetSelectionHandler) Handle(s *database.Socket, data []byte) ([]byte
 }
 
 func (h *TravelToCastleHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
-
+	if s.Character.Map == 233 {
+		resp := CLANCASTLE_MAP
+		index := 7
+		length := 3
+		if database.FiveClans[1].ClanID != 0 {
+			//FLAME, WATERFALL, SKY GARDEN, FOREST,UNDERGROUND
+			resp.Insert([]byte{0x01, 0xdf, 0x04, 0x00, 0x00}, index)
+			index += 5
+			length += 5
+			area, _ := database.FindGuildByID(database.FiveClans[1].ClanID) //FLAME WOLF TEMPLE
+			resp.Insert([]byte{byte(len(area.Name))}, index)                // Guild name length
+			index++
+			resp.Insert([]byte(area.Name), index) // Guild name
+			index += len(area.Name)
+			length += 1 + len(area.Name)
+		}
+		if database.FiveClans[2].ClanID != 0 {
+			resp.Insert([]byte{0x02, 0xeb, 0x00, 0x00, 0x00}, index)
+			index += 5
+			length += 5
+			area, _ := database.FindGuildByID(database.FiveClans[2].ClanID) //OCEAN ARMY
+			resp.Insert([]byte{byte(len(area.Name))}, index)                // Guild name length
+			index++
+			resp.Insert([]byte(area.Name), index) // Guild name
+			index += len(area.Name)
+			length += 1 + len(area.Name)
+		}
+		if database.FiveClans[3].ClanID != 0 {
+			resp.Insert([]byte{0x03, 0x5d, 0x06, 0x00, 0x00}, index)
+			index += 5
+			length += 5
+			area, _ := database.FindGuildByID(database.FiveClans[3].ClanID) //LIGHTNING HILL
+			resp.Insert([]byte{byte(len(area.Name))}, index)                // Guild name length
+			index++
+			resp.Insert([]byte(area.Name), index) // Guild name
+			index += len(area.Name)
+			length += 1 + len(area.Name)
+		}
+		if database.FiveClans[4].ClanID != 0 {
+			resp.Insert([]byte{0x04, 0xf0, 0x06, 0x00, 0x00}, index)
+			index += 5
+			length += 5
+			area, _ := database.FindGuildByID(database.FiveClans[4].ClanID) //SOUTHERN WOOD TEMPLE
+			resp.Insert([]byte{byte(len(area.Name))}, index)                // Guild name length
+			index++
+			resp.Insert([]byte(area.Name), index) // Guild name
+			index += len(area.Name)
+			length += 1 + len(area.Name)
+		}
+		if database.FiveClans[5].ClanID != 0 {
+			resp.Insert([]byte{0x05, 0xd7, 0x05, 0x00, 0x00}, index)
+			index += 5
+			length += 5
+			area, _ := database.FindGuildByID(database.FiveClans[5].ClanID) //WESTERN LAND TEMPLE
+			resp.Insert([]byte{byte(len(area.Name))}, index)                // Guild name length
+			index++
+			resp.Insert([]byte(area.Name), index) // Guild name
+			index += len(area.Name)
+			length += 1 + len(area.Name)
+		}
+		/*resp.Insert([]byte{0x41, 0x73, 0x63, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x53, 0x6b, 0x79}, index) //FLAME WOLF TEMPLE
+		index += 14
+		resp.Insert([]byte{0x02, 0xeb, 0x00, 0x00, 0x00}, index)
+		index += 5
+		resp.Insert([]byte{0x0d, 0x41, 0x73, 0x63, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x53, 0x6b, 0x79}, index) //OCEAN ARMY
+		index += 14
+		resp.Insert([]byte{0x03, 0x5d, 0x06, 0x00, 0x00}, index)
+		index += 5
+		resp.Insert([]byte{0x0d, 0x41, 0x73, 0x63, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x53, 0x6b, 0x79}, index) //LIGHTNING HILL
+		index += 14
+		resp.Insert([]byte{0x04, 0xf0, 0x06, 0x00, 0x00}, index)
+		index += 5
+		resp.Insert([]byte{0x0d, 0x41, 0x73, 0x63, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x53, 0x6b, 0x79}, index) //SOUTHERN WOOD TEMPLE
+		index += 14
+		resp.Insert([]byte{0x05, 0xd7, 0x05, 0x00, 0x00}, index)
+		index += 5
+		resp.Insert([]byte{0x0d, 0x41, 0x73, 0x63, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x20, 0x53, 0x6b, 0x79}, index) //WESTERN LAND TEMPLE
+		index += 14*/
+		resp.SetLength(int16(binary.Size(resp) - 6))
+		//fmt.Printf("RESP:\t %x \n", []byte(resp))
+		return resp, nil
+	}
 	return s.Character.ChangeMap(233, nil)
 }
-
 func (h *OpenTacticalSpaceHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
 
 	return TACTICAL_SPACE_MENU, nil
@@ -94,6 +187,57 @@ func (h *TacticalSpaceTPHandler) Handle(s *database.Socket, data []byte) ([]byte
 
 	mapID := int16(data[6])
 	return s.Character.ChangeMap(mapID, nil)
+}
+func (h *TravelToFiveClanArea) Handle(s *database.Socket, data []byte) ([]byte, error) {
+	areaID := int16(data[7])
+	switch areaID {
+	case 0:
+		x := "508,564"
+		coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+		s.Conn.Write(coord)
+	case 1: //FLAME WOLF TEMPLE
+		if s.Character.GuildID == database.FiveClans[1].ClanID {
+			x := "243,777"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			s.Conn.Write(coord)
+		} else {
+			s.Conn.Write(CANNOT_MOVE)
+		}
+	case 2: //OCEAN ARMY
+		if s.Character.GuildID == database.FiveClans[2].ClanID {
+			x := "131,433"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			s.Conn.Write(coord)
+		} else {
+			s.Conn.Write(CANNOT_MOVE)
+		}
+	case 3: //LIGHTNING HILL
+		if s.Character.GuildID == database.FiveClans[3].ClanID {
+			x := "615,171"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			s.Conn.Write(coord)
+		} else {
+			s.Conn.Write(CANNOT_MOVE)
+		}
+	case 4: //SOUTHERN WOOD TEMPLE
+		if s.Character.GuildID == database.FiveClans[4].ClanID {
+			x := "863,425"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			s.Conn.Write(coord)
+		} else {
+			s.Conn.Write(CANNOT_MOVE)
+		}
+	case 5: //WESTERN LAND TEMPLE
+		if s.Character.GuildID == database.FiveClans[5].ClanID {
+			x := "689,867"
+			coord := s.Character.Teleport(database.ConvertPointToLocation(x))
+			s.Conn.Write(coord)
+		} else {
+			s.Conn.Write(CANNOT_MOVE)
+		}
+	}
+
+	return nil, nil
 }
 
 func (h *InTacticalSpaceTPHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {

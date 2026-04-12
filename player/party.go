@@ -3,9 +3,9 @@ package player
 import (
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/server"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/server"
+	"hero-emulator/utils"
 
 	"github.com/thoas/go-funk"
 )
@@ -37,6 +37,7 @@ func (h *SendPartyRequestHandler) Handle(s *database.Socket, data []byte) ([]byt
 		party.Leader = s.Character
 		s.Character.PartyID = s.Character.UserID
 		party.Create()
+		//s.Conn.Write(database.GetPartyMemberData(party.Leader))
 	} else if len(party.GetMembers()) >= 4 {
 		return nil, nil
 	}
@@ -83,19 +84,18 @@ func (h *RespondPartyRequestHandler) Handle(s *database.Socket, data []byte) ([]
 			return m.Accepted
 		}).([]*database.PartyMember)
 
-		r := utils.Packet{0xAA, 0x55, 0x03, 0x00, 0x52, 0x0B, 0x00, 0x55, 0xAA, 0xAA, 0x55, 0x04, 0x00, 0x52, 0x02, 0x0A, 0x00, 0x55, 0xAA}
+		r := utils.Packet{0xAA, 0x55, 0x03, 0x00, 0x52, 0x0B, 0x00, 0x55, 0xAA} //0xAA, 0x55, 0x04, 0x00, 0x52, 0x02, 0x0A, 0x00, 0x55, 0xAA
 		if len(members) == 1 {
 			r.Concat(database.GetPartyMemberData(party.Leader))
 			party.Leader.Socket.Write(r)
 		}
-
+		//	partyLeaderMessage := r
 		party.WelcomeMember(s.Character)                       // send all party members mine data
 		resp.Concat(database.GetPartyMemberData(party.Leader)) // get party leader
 
 		for _, member := range members { // get all party members
 			resp.Concat(database.GetPartyMemberData(member.Character))
 		}
-
 	} else {
 		m := party.GetMember(s.Character.ID)
 		party.RemoveMember(m)

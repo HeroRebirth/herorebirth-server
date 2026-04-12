@@ -4,7 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	gorp "gopkg.in/gorp.v1"
 )
 
@@ -23,6 +24,7 @@ type NpcPosition struct {
 	RespawnTime int     `db:"respawn_time"`
 	IsNPC       bool    `db:"is_npc"`
 	Attackable  bool    `db:"attackable"`
+	Faction     int     `db:"faction"`
 
 	PseudoID uint16 `db:"-"`
 }
@@ -54,6 +56,21 @@ func GetAllNPCPos() ([]*NpcPosition, error) {
 
 	var arr []*NpcPosition
 	query := `select * from "data".npc_pos_table order by id`
+
+	if _, err := db.Select(&arr, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("GetAllNpcPos: %s", err.Error())
+	}
+
+	return arr, nil
+}
+
+func GetAllAIPos() ([]*NpcPosition, error) {
+
+	var arr []*NpcPosition
+	query := `select * from "data".npc_pos_table WHERE is_npc = '0' order by id `
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {

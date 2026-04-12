@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"regexp"
 	dbg "runtime/debug"
 	"sort"
@@ -13,41 +14,57 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/logging"
+	"hero-emulator/messaging"
+	"hero-emulator/nats"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 	gorp "gopkg.in/gorp.v1"
 	null "gopkg.in/guregu/null.v3"
 )
 
 const (
-	MONK                = 0x34
-	MALE_BLADE          = 0x35
-	FEMALE_BLADE        = 0x36
-	AXE                 = 0x38
-	FEMALE_ROD          = 0x39
-	DUAL_BLADE          = 0x3B
-	DIVINE_MONK         = 0x3E
-	DIVINE_MALE_BLADE   = 0x3F
-	DIVINE_FEMALE_BLADE = 0x40
-	DIVINE_AXE          = 0x42
-	DIVINE_FEMALE_ROD   = 0x43
-	DIVINE_DUAL_BLADE   = 0x45
+	MONK                  = 0x34
+	MALE_BLADE            = 0x35
+	FEMALE_BLADE          = 0x36
+	AXE                   = 0x38
+	FEMALE_ROD            = 0x39
+	DUAL_BLADE            = 0x3B
+	BEAST_KING            = 0x32
+	EMPRESS               = 0x33
+	DIVINE_MONK           = 0x3E
+	DIVINE_MALE_BLADE     = 0x3F
+	DIVINE_FEMALE_BLADE   = 0x40
+	DIVINE_AXE            = 0x42
+	DIVINE_FEMALE_ROD     = 0x43
+	DIVINE_DUAL_BLADE     = 0x45
+	DIVINE_BEAST_KING     = 0x3c
+	DIVINE_EMPRESS        = 0x3D
+	DARKNESS_MONK         = 0x48
+	DARKNESS_MALE_BLADE   = 0x49
+	DARKNESS_FEMALE_BLADE = 0x4A
+	DARKNESS_AXE          = 0x4C
+	DARKNESS_FEMALE_ROD   = 0x4D
+	DARKNESS_DUAL_BLADE   = 0x4F
+	DARKNESS_BEAST_KING   = 0x46
+	DARKNESS_EMPRESS      = 0x47
 )
 
 var (
-	characters     = make(map[int]*Character)
-	characterMutex sync.RWMutex
-	GenerateID     func(*Character) error
-	GeneratePetID  func(*Character, *PetSlot)
-
-	DEAL_DAMAGE       = utils.Packet{0xAA, 0x55, 0x18, 0x00, 0x16, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
-	BAG_EXPANDED      = utils.Packet{0xAA, 0x55, 0x17, 0x00, 0xA3, 0x02, 0x01, 0x32, 0x30, 0x32, 0x30, 0x2D, 0x30, 0x33, 0x2D, 0x31, 0x37, 0x20, 0x31, 0x31, 0x3A, 0x32, 0x32, 0x3A, 0x30, 0x31, 0x00, 0x55, 0xAA}
-	BANK_ITEMS        = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x57, 0x05, 0x01, 0x02, 0x55, 0xAA}
-	CHARACTER_DIED    = utils.Packet{0xAA, 0x55, 0x02, 0x00, 0x12, 0x01, 0x55, 0xAA}
-	CHARACTER_SPAWNED = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x21, 0x01, 0xD7, 0xEF, 0xE6, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0xC9, 0x00, 0x00, 0x00,
+	characters            = make(map[int]*Character)
+	characterMutex        sync.RWMutex
+	GenerateID            func(*Character) error
+	GeneratePetID         func(*Character, *PetSlot)
+	challengerGuild       = &Guild{}
+	enemyGuild            = &Guild{}
+	Beast_King_Infections = []int16{277, 307, 368, 283, 319, 382, 291, 333, 398, 297, 351, 418}
+	Empress_Infections    = []int16{280, 313, 375, 287, 326, 390, 294, 342, 408, 302, 359, 429}
+	DEAL_DAMAGE           = utils.Packet{0xAA, 0x55, 0x18, 0x00, 0x16, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
+	BAG_EXPANDED          = utils.Packet{0xAA, 0x55, 0x17, 0x00, 0xA3, 0x02, 0x01, 0x32, 0x30, 0x32, 0x31, 0x2D, 0x30, 0x35, 0x2D, 0x31, 0x33, 0x20, 0x31, 0x30, 0x3A, 0x32, 0x39, 0x3A, 0x3, 0x31, 0x00, 0x55, 0xAA}
+	BANK_ITEMS            = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x57, 0x05, 0x01, 0x02, 0x55, 0xAA}
+	CHARACTER_DIED        = utils.Packet{0xAA, 0x55, 0x02, 0x00, 0x12, 0x01, 0x55, 0xAA}
+	CHARACTER_SPAWNED     = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x21, 0x01, 0xD7, 0xEF, 0xE6, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0xC9, 0x00, 0x00, 0x00,
 		0x49, 0x2A, 0xFE, 0x00, 0x20, 0x1C, 0x00, 0x00, 0x02, 0xD2, 0x7E, 0x7F, 0xBF, 0xCD, 0x1A, 0x86, 0x3D, 0x33, 0x33, 0x6B, 0x41, 0xFF, 0xFF, 0x10, 0x27,
 		0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0xC4, 0x0E, 0x00, 0x00, 0xC8, 0xBB, 0x30, 0x00, 0x00, 0x03, 0xF3, 0x03, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
 		0x00, 0x10, 0x27, 0x00, 0x00, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x55, 0xAA}
@@ -64,7 +81,7 @@ var (
 	ITEM_COUNT       = utils.Packet{0xAA, 0x55, 0x0C, 0x00, 0x59, 0x04, 0x0A, 0x00, 0x55, 0xAA}
 	GREEN_ITEM_COUNT = utils.Packet{0xAA, 0x55, 0x0A, 0x00, 0x59, 0x19, 0x0A, 0x00, 0x55, 0xAA}
 	ITEM_EXPIRED     = utils.Packet{0xAA, 0x55, 0x06, 0x00, 0x69, 0x03, 0x55, 0xAA}
-	ITEM_ADDED       = utils.Packet{0xAA, 0x55, 0x1E, 0x00, 0x58, 0x01, 0x0A, 0x00, 0x00, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x20, 0x1C, 0x00, 0x00, 0x55, 0xAA}
+	ITEM_ADDED       = utils.Packet{0xaa, 0x55, 0x2e, 0x00, 0x57, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x83, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xaa}
 	ITEM_LOOTED      = utils.Packet{0xAA, 0x55, 0x33, 0x00, 0x59, 0x01, 0x0A, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x11, 0x55, 0xAA}
 
@@ -113,8 +130,10 @@ var (
 	TRADE_CANCELLED         = utils.Packet{0xAA, 0x55, 0x06, 0x00, 0x53, 0x03, 0xD5, 0x07, 0x7E, 0x02, 0x55, 0xAA}
 	SKILL_BOOK_EXISTS       = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x59, 0x04, 0xFA, 0x03, 0x55, 0xAA}
 	INVALID_CHARACTER_TYPE  = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x59, 0x04, 0xF2, 0x03, 0x55, 0xAA}
+	CHANGE_RANK             = utils.Packet{0xAA, 0x55, 0x09, 0x00, 0x2F, 0xF1, 0x36, 0x55, 0xAA, 0xAA, 0x55, 0x03, 0x00, 0x2F, 0xf2, 0x00, 0x55, 0xAA}
 	NO_SLOTS_FOR_SKILL_BOOK = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x59, 0x04, 0xF3, 0x03, 0x55, 0xAA}
 	OPEN_SALE               = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x55, 0x01, 0x0A, 0x00, 0x55, 0xAA}
+	DEAL_BUFF_AI            = utils.Packet{0xaa, 0x55, 0x1e, 0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xaa}
 	GET_SALE_ITEMS          = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x55, 0x03, 0x0A, 0x00, 0x00, 0x55, 0xAA}
 	CLOSE_SALE              = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x55, 0x02, 0x0A, 0x00, 0x55, 0xAA}
 	BOUGHT_SALE_ITEM        = utils.Packet{0xAA, 0x55, 0x39, 0x00, 0x53, 0x10, 0x0A, 0x00, 0x01, 0x00, 0xA2, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
@@ -131,11 +150,13 @@ var (
 	PVP_FINISHED     = utils.Packet{0xAA, 0x55, 0x02, 0x00, 0x2A, 0x05, 0x55, 0xAA}
 	FORM_ACTIVATED   = utils.Packet{0xAA, 0x55, 0x05, 0x00, 0x37, 0x55, 0xAA}
 	FORM_DEACTIVATED = utils.Packet{0xAA, 0x55, 0x01, 0x00, 0x38, 0x55, 0xAA}
+	HONOR_RANKS      = []int{0, 1, 2, 14, 30, 50, 4}
 )
 
 type Target struct {
-	Damage int `db:"-" json:"damage"`
-	AI     *AI `db:"-" json:"ai"`
+	Damage  int `db:"-" json:"damage"`
+	SkillId int `db:"-" json:"skillid"`
+	AI      *AI `db:"-" json:"ai"`
 }
 
 type PlayerTarget struct {
@@ -144,48 +165,50 @@ type PlayerTarget struct {
 }
 
 type Character struct {
-	ID                       int       `db:"id" json:"id"`
-	UserID                   string    `db:"user_id" json:"user_id"`
-	Name                     string    `db:"name" json:"name"`
-	Epoch                    int64     `db:"epoch" json:"epoch"`
-	Type                     int       `db:"type" json:"type"`
-	Faction                  int       `db:"faction" json:"faction"`
-	Height                   int       `db:"height" json:"height"`
-	Level                    int       `db:"level" json:"level"`
-	Class                    int       `db:"class" json:"class"`
-	IsOnline                 bool      `db:"is_online" json:"is_online"`
-	IsActive                 bool      `db:"is_active" json:"is_active"`
-	Gold                     uint64    `db:"gold" json:"gold"`
-	Coordinate               string    `db:"coordinate" json:"coordinate"`
-	Map                      int16     `db:"map" json:"map"`
-	Exp                      int64     `db:"exp" json:"exp"`
-	HTVisibility             int       `db:"ht_visibility" json:"ht_visibility"`
-	WeaponSlot               int       `db:"weapon_slot" json:"weapon_slot"`
-	RunningSpeed             float64   `db:"running_speed" json:"running_speed"`
-	GuildID                  int       `db:"guild_id" json:"guild_id"`
-	ExpMultiplier            float64   `db:"exp_multiplier" json:"exp_multiplier"`
-	DropMultiplier           float64   `db:"drop_multiplier" json:"drop_multiplier"`
-	Slotbar                  []byte    `db:"slotbar" json:"slotbar"`
-	CreatedAt                null.Time `db:"created_at" json:"created_at"`
-	AdditionalExpMultiplier  float64   `db:"additional_exp_multiplier" json:"additional_exp_multiplier"`
-	AdditionalDropMultiplier float64   `db:"additional_drop_multiplier" json:"additional_drop_multiplier"`
-	AidMode                  bool      `db:"aid_mode" json:"aid_mode"`
-	AidTime                  uint32    `db:"aid_time" json:"aid_time"`
-
-	AddingExp              sync.Mutex `db:"-" json:"-"`
-	AddingGold             sync.Mutex `db:"-" json:"-"`
-	Looting                sync.Mutex `db:"-" json:"-"`
-	AdditionalRunningSpeed float64    `db:"-" json:"-"`
-	InvMutex               sync.Mutex `db:"-"`
-	Socket                 *Socket    `db:"-" json:"-"`
-	ExploreWorld           func()     `db:"-" json:"-"`
-	HasLot                 bool       `db:"-" json:"-"`
-	LastRoar               time.Time  `db:"-" json:"-"`
-	Meditating             bool       `db:"-"`
-	MovementToken          int64      `db:"-" json:"-"`
-	PseudoID               uint16     `db:"-" json:"pseudo_id"`
-	PTS                    int        `db:"-" json:"pts"`
-	OnSight                struct {
+	ID                       int        `db:"id" json:"id"`
+	UserID                   string     `db:"user_id" json:"user_id"`
+	Name                     string     `db:"name" json:"name"`
+	Epoch                    int64      `db:"epoch" json:"epoch"`
+	Type                     int        `db:"type" json:"type"`
+	Faction                  int        `db:"faction" json:"faction"`
+	Height                   int        `db:"height" json:"height"`
+	Level                    int        `db:"level" json:"level"`
+	Class                    int        `db:"class" json:"class"`
+	IsOnline                 bool       `db:"is_online" json:"is_online"`
+	IsActive                 bool       `db:"is_active" json:"is_active"`
+	Gold                     uint64     `db:"gold" json:"gold"`
+	Coordinate               string     `db:"coordinate" json:"coordinate"`
+	Map                      int16      `db:"map" json:"map"`
+	Exp                      int64      `db:"exp" json:"exp"`
+	HTVisibility             int        `db:"ht_visibility" json:"ht_visibility"`
+	WeaponSlot               int        `db:"weapon_slot" json:"weapon_slot"`
+	RunningSpeed             float64    `db:"running_speed" json:"running_speed"`
+	GuildID                  int        `db:"guild_id" json:"guild_id"`
+	ExpMultiplier            float64    `db:"exp_multiplier" json:"exp_multiplier"`
+	DropMultiplier           float64    `db:"drop_multiplier" json:"drop_multiplier"`
+	Slotbar                  []byte     `db:"slotbar" json:"slotbar"`
+	CreatedAt                null.Time  `db:"created_at" json:"created_at"`
+	AdditionalExpMultiplier  float64    `db:"additional_exp_multiplier" json:"additional_exp_multiplier"`
+	AdditionalDropMultiplier float64    `db:"additional_drop_multiplier" json:"additional_drop_multiplier"`
+	AidMode                  bool       `db:"aid_mode" json:"aid_mode"`
+	AidTime                  uint32     `db:"aid_time" json:"aid_time"`
+	HonorRank                int64      `db:"rank" json:"rank"`
+	HeadStyle                int64      `db:"headstyle" json:"headstyle"`
+	FaceStyle                int64      `db:"facestyle" json:"facestyle"`
+	AddingExp                sync.Mutex `db:"-" json:"-"`
+	AddingGold               sync.Mutex `db:"-" json:"-"`
+	Looting                  sync.Mutex `db:"-" json:"-"`
+	AdditionalRunningSpeed   float64    `db:"-" json:"-"`
+	InvMutex                 sync.Mutex `db:"-"`
+	Socket                   *Socket    `db:"-" json:"-"`
+	ExploreWorld             func()     `db:"-" json:"-"`
+	HasLot                   bool       `db:"-" json:"-"`
+	LastRoar                 time.Time  `db:"-" json:"-"`
+	Meditating               bool       `db:"-"`
+	MovementToken            int64      `db:"-" json:"-"`
+	PseudoID                 uint16     `db:"-" json:"pseudo_id"`
+	PTS                      int        `db:"-" json:"pts"`
+	OnSight                  struct {
 		Drops       map[int]interface{} `db:"-" json:"drops"`
 		DropsMutex  sync.RWMutex
 		Mobs        map[int]interface{} `db:"-" json:"mobs"`
@@ -197,23 +220,31 @@ type Character struct {
 		Players     map[int]interface{} `db:"-" json:"players"`
 		PlayerMutex sync.RWMutex        `db:"-"`
 	} `db:"-" json:"on_sight"`
-	PartyID       string          `db:"-"`
-	Selection     int             `db:"-" json:"selection"`
-	Targets       []*Target       `db:"-" json:"target"`
-	TamingAI      *AI             `db:"-" json:"-"`
-	PlayerTargets []*PlayerTarget `db:"-" json:"player_targets"`
-	TradeID       string          `db:"-" json:"trade_id"`
-	Invisible     bool            `db:"-" json:"-"`
-	DetectionMode bool            `db:"-" json:"-"`
-	VisitedSaleID uint16          `db:"-" json:"-"`
-	DuelID        int             `db:"-" json:"-"`
-	DuelStarted   bool            `db:"-" json:"-"`
-	Respawning    bool            `db:"-" json:"-"`
-	SkillHistory  utils.SMap      `db:"-" json:"-"`
-	Morphed       bool            `db:"-" json:"-"`
-
-	HandlerCB    func() `db:"-"`
-	PetHandlerCB func() `db:"-"`
+	PartyID         string          `db:"-"`
+	Selection       int             `db:"-" json:"selection"`
+	Targets         []*Target       `db:"-" json:"target"`
+	TamingAI        *AI             `db:"-" json:"-"`
+	PlayerTargets   []*PlayerTarget `db:"-" json:"player_targets"`
+	TradeID         string          `db:"-" json:"trade_id"`
+	Invisible       bool            `db:"-" json:"-"`
+	DetectionMode   bool            `db:"-" json:"-"`
+	VisitedSaleID   uint16          `db:"-" json:"-"`
+	DuelID          int             `db:"-" json:"-"`
+	DuelStarted     bool            `db:"-" json:"-"`
+	IsinWar         bool            `db:"-" json:"-"`
+	WarKillCount    int             `db:"-" json:"-"`
+	WarContribution int             `db:"-" json:"-"`
+	IsAcceptedWar   bool            `db:"-" json:"-"`
+	Respawning      bool            `db:"-" json:"-"`
+	SkillHistory    utils.SMap      `db:"-" json:"-"`
+	Morphed         bool            `db:"-" json:"-"`
+	IsDungeon       bool            `db:"-" json:"-"`
+	DungeonLevel    int16           `db:"-" json:"-"`
+	CanTip          int16           `db:"-" json:"-"`
+	PacketSended    bool            `db:"-" json:"-"`
+	GeneratedNumber int             `db:"-" json:"-"`
+	HandlerCB       func()          `db:"-"`
+	PetHandlerCB    func()          `db:"-"`
 
 	inventory []*InventorySlot `db:"-" json:"-"`
 }
@@ -258,6 +289,27 @@ func (t *Character) Delete() error {
 	delete(characters, t.ID)
 	_, err := db.Delete(t)
 	return err
+}
+func FindCharactersInMap(mapid int16) map[int]*Character {
+
+	characterMutex.RLock()
+	allChars := funk.Values(characters).([]*Character)
+	characterMutex.RUnlock()
+
+	allChars = funk.Filter(allChars, func(c *Character) bool {
+		if c.Socket == nil {
+			return false
+		}
+
+		return c.Map == mapid && c.IsOnline
+	}).([]*Character)
+
+	candidates := make(map[int]*Character)
+	for _, c := range allChars {
+		candidates[c.ID] = c
+	}
+
+	return candidates
 }
 
 func (t *Character) InventorySlots() ([]*InventorySlot, error) {
@@ -309,7 +361,7 @@ func (t *Character) CopyInventorySlots() []*InventorySlot {
 }
 
 func RefreshAIDs() error {
-	query := `update hops.characters SET aid_time = 7200`
+	query := `update hops.characters SET aid_time = 18000`
 	_, err := db.Exec(query)
 	if err != nil {
 		return err
@@ -319,7 +371,7 @@ func RefreshAIDs() error {
 	allChars := funk.Values(characters).([]*Character)
 	characterMutex.RUnlock()
 	for _, c := range allChars {
-		c.AidTime = 7200
+		c.AidTime = 18000
 	}
 
 	return err
@@ -408,6 +460,37 @@ func FindCharacterByName(name string) (*Character, error) {
 	return character, nil
 }
 
+func FindAllCharacter() ([]*Character, error) {
+
+	charMap := make(map[int]*Character)
+
+	var arr []*Character
+	query := `select * from hops.characters`
+
+	if _, err := db.Select(&arr, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("FindAllCharacter: %s", err.Error())
+	}
+
+	characterMutex.Lock()
+	defer characterMutex.Unlock()
+
+	var chars []*Character
+	for _, c := range arr {
+		char, ok := charMap[c.ID]
+		if ok {
+			chars = append(chars, char)
+		} else {
+			characters[c.ID] = c
+			chars = append(chars, c)
+		}
+	}
+
+	return chars, nil
+}
+
 func FindCharacterByID(id int) (*Character, error) {
 
 	characterMutex.RLock()
@@ -469,9 +552,14 @@ func (c *Character) GetAppearingItemSlots() []int {
 	return []int{helmSlot, maskSlot, armorSlot, 3, 4, 5, 6, 7, 8, bootsSlot, 10}
 }
 
+func (c *Character) GetEquipedItemSlots() []int {
+	return []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 307, 309, 310, 312, 313, 314, 315}
+}
+
 func (c *Character) Logout() {
 	c.IsOnline = false
 	c.IsActive = false
+	c.IsDungeon = false
 	c.OnSight.Drops = map[int]interface{}{}
 	c.OnSight.Mobs = map[int]interface{}{}
 	c.OnSight.NPCs = map[int]interface{}{}
@@ -484,7 +572,6 @@ func (c *Character) Logout() {
 	c.TradeID = ""
 	c.LeaveParty()
 	c.EndPvP()
-
 	sale := FindSale(c.PseudoID)
 	if sale != nil {
 		sale.Delete()
@@ -562,6 +649,12 @@ func (c *Character) GetNearbyAIIDs() ([]int, error) {
 		distance = 64.0
 		ids      []int
 	)
+	if funk.Contains(DungeonZones, c.Map) {
+		distance = 150.0
+	}
+	if c.IsinWar {
+		distance = 25.0
+	}
 
 	user, err := FindUserByID(c.UserID)
 	if err != nil {
@@ -776,7 +869,30 @@ func (c *Character) ShowItems() ([]byte, error) {
 	if pet != nil && pet.IsOnline {
 		count++
 	}
-
+	weapon1ID := weapon1.ItemID
+	if weapon1.Appearance != 0 {
+		weapon1ID = weapon1.Appearance
+	}
+	weapon2ID := weapon2.ItemID
+	if weapon2.Appearance != 0 {
+		weapon2ID = weapon2.Appearance
+	}
+	helmID := helm.ItemID
+	if slots[0] == 0 && helm.Appearance != 0 {
+		helmID = helm.Appearance
+	}
+	maskID := mask.ItemID
+	if slots[1] == 1 && mask.Appearance != 0 {
+		maskID = mask.Appearance
+	}
+	armorID := armor.ItemID
+	if slots[2] == 2 && armor.Appearance != 0 {
+		armorID = armor.Appearance
+	}
+	bootsID := boots.ItemID
+	if slots[9] == 9 && boots.Appearance != 0 {
+		bootsID = boots.Appearance
+	}
 	resp := SHOW_ITEMS
 	resp.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 8) // character pseudo id
 	resp[10] = byte(c.WeaponSlot)                                 // character weapon slot
@@ -791,7 +907,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 	index += 3
 
 	resp.Insert(utils.IntToBytes(uint64(helm.Plus), 1, true), index) // helm plus
-	resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index+1)
+	resp.Insert(utils.IntToBytes(uint64(helmID), 4, true), index+1)
 	index += 5
 
 	resp.Insert(utils.IntToBytes(uint64(mask.ItemID), 4, true), index) // mask id
@@ -802,7 +918,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 	index += 3
 
 	resp.Insert(utils.IntToBytes(uint64(mask.Plus), 1, true), index) // mask plus
-	resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index+1)
+	resp.Insert(utils.IntToBytes(uint64(maskID), 4, true), index+1)
 	index += 5
 
 	resp.Insert(utils.IntToBytes(uint64(armor.ItemID), 4, true), index) // armor id
@@ -813,7 +929,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 	index += 3
 
 	resp.Insert(utils.IntToBytes(uint64(armor.Plus), 1, true), index) // armor plus
-	resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index+1)
+	resp.Insert(utils.IntToBytes(uint64(armorID), 4, true), index+1)
 	index += 5
 
 	if weapon1.ItemID > 0 {
@@ -825,7 +941,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 		index += 3
 
 		resp.Insert(utils.IntToBytes(uint64(weapon1.Plus), 1, true), index) // weapon1 plus
-		resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index+1)
+		resp.Insert(utils.IntToBytes(uint64(weapon1ID), 4, true), index+1)
 		index += 5
 	}
 
@@ -838,7 +954,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 		index += 3
 
 		resp.Insert(utils.IntToBytes(uint64(weapon2.Plus), 1, true), index) // weapon2 plus
-		resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index+1)
+		resp.Insert(utils.IntToBytes(uint64(weapon2ID), 4, true), index+1)
 		index += 5
 	}
 
@@ -850,7 +966,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 	index += 3
 
 	resp.Insert(utils.IntToBytes(uint64(boots.Plus), 1, true), index) // boots plus
-	resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index+1)
+	resp.Insert(utils.IntToBytes(uint64(bootsID), 4, true), index+1)
 	index += 5
 
 	if pet != nil && pet.IsOnline {
@@ -929,6 +1045,29 @@ func FindOnlineCharacters() (map[int]*Character, error) {
 	}
 
 	return characters, nil
+}
+func (c *Character) FindItemInInventoryByPlus(callback func(*InventorySlot) bool, itemPlus uint8, itemIDs ...int64) (int16, *InventorySlot, error) {
+
+	slots, err := c.InventorySlots()
+	if err != nil {
+		return -1, nil, err
+	}
+
+	for index, slot := range slots {
+		ok, _ := utils.Contains(itemIDs, slot.ItemID)
+		ok2, _ := utils.Contains(itemPlus, slot.Plus)
+		if ok && ok2 {
+			if index >= 0x43 && index <= 0x132 {
+				continue
+			}
+
+			if callback == nil || callback(slot) {
+				return int16(index), slot, nil
+			}
+		}
+	}
+
+	return -1, nil, nil
 }
 
 func (c *Character) FindItemInInventory(callback func(*InventorySlot) bool, itemIDs ...int64) (int16, *InventorySlot, error) {
@@ -1095,7 +1234,11 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 	resp := utils.Packet{}
 	if slotID == -1 {
 		if stackable != nil { // stackable item
-			slotID, item, err = c.FindItemInInventory(nil, itemToAdd.ItemID)
+			if itemToAdd.Plus > 0 {
+				slotID, item, err = c.FindItemInInventoryByPlus(nil, itemToAdd.Plus, itemToAdd.ItemID)
+			} else {
+				slotID, item, err = c.FindItemInInventory(nil, itemToAdd.ItemID)
+			}
 			if err != nil {
 				return nil, -1, err
 			} else if slotID == -1 { // no same item found => find free slot
@@ -1130,7 +1273,6 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 
 	if !stacking && stackable == nil {
 		//for j := 0; j < int(itemToAdd.Quantity); j++ {
-
 		if lootingDrop {
 			r := ITEM_LOOTED
 			r.Insert(utils.IntToBytes(uint64(itemToAdd.ItemID), 4, true), 9) // item id
@@ -1144,13 +1286,15 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 			r.Insert(itemToAdd.GetUpgrades(), 19)                          // item upgrades
 			resp.Concat(r)
 		} else {
-			r := ITEM_ADDED
-			r.Insert(utils.IntToBytes(uint64(itemToAdd.ItemID), 4, true), 8) // item id
-			r.Insert(utils.IntToBytes(uint64(slot.Quantity), 2, true), 14)   // item quantity
-			r.Insert(utils.IntToBytes(uint64(slotID), 2, true), 16)          // slot id
-			r.Insert(utils.IntToBytes(uint64(c.Gold), 8, true), 22)          // gold
-			resp.Concat(r)
+			resp = ITEM_ADDED
+			resp.Insert(utils.IntToBytes(uint64(itemToAdd.ItemID), 4, true), 6) // item id
+			resp.Insert(utils.IntToBytes(uint64(slot.Quantity), 2, true), 12)   // item quantity
+			resp.Insert(utils.IntToBytes(uint64(slotID), 2, true), 14)          // slot id
+			resp.Insert(utils.IntToBytes(uint64(0), 8, true), 20)               // ures
+			resp.Overwrite(utils.IntToBytes(uint64(itemToAdd.ItemType), 1, true), 41)
+			resp.Overwrite(utils.IntToBytes(uint64(itemToAdd.JudgementStat), 4, true), 42)
 		}
+		resp.Concat(c.GetGold())
 		/*
 			slotID, err = c.FindFreeSlot()
 			if err != nil || slotID == -1 {
@@ -1161,7 +1305,6 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 		*/
 		//}
 	} else {
-
 		if lootingDrop {
 			r := ITEM_LOOTED
 			r.Insert(utils.IntToBytes(uint64(itemToAdd.ItemID), 4, true), 9) // item id
@@ -1185,11 +1328,14 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 			slot.UpgradeArr = itemToAdd.UpgradeArr
 
 			resp = ITEM_ADDED
-			resp.Insert(utils.IntToBytes(uint64(itemToAdd.ItemID), 4, true), 8)    // item id
-			resp.Insert(utils.IntToBytes(uint64(itemToAdd.Quantity), 2, true), 14) // item quantity
-			resp.Insert(utils.IntToBytes(uint64(slotID), 2, true), 16)             // slot id
-			resp.Insert(utils.IntToBytes(uint64(c.Gold), 8, true), 22)             // gold
+			resp.Insert(utils.IntToBytes(uint64(itemToAdd.ItemID), 4, true), 6)    // item id
+			resp.Insert(utils.IntToBytes(uint64(itemToAdd.Quantity), 2, true), 12) // item quantity
+			resp.Insert(utils.IntToBytes(uint64(slotID), 2, true), 14)             // slot id
+			resp.Insert(utils.IntToBytes(uint64(0), 8, true), 20)                  // gold
+			resp.Overwrite(utils.IntToBytes(uint64(itemToAdd.ItemType), 1, true), 41)
+			resp.Overwrite(utils.IntToBytes(uint64(itemToAdd.JudgementStat), 4, true), 42)
 		}
+		resp.Concat(c.GetGold())
 	}
 
 	if slot.ID > 0 {
@@ -1197,7 +1343,6 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 	} else {
 		err = slot.Insert()
 	}
-
 	if err != nil {
 		*slot = *NewSlot()
 		resp = utils.Packet{}
@@ -1278,6 +1423,20 @@ func (c *Character) ReplaceItem(itemID int, where, to int16) ([]byte, error) {
 			toItem.InUse = false
 		}
 	}
+	if toItem.ItemID != 0 {
+		toIteminfo := Items[int64(toItem.ItemID)]
+		if toIteminfo.ItemBuff != 0 {
+			buff, err := FindBuffByID(int(toIteminfo.ItemBuff), c.ID)
+			if err != nil {
+				return nil, err
+			}
+			if buff != nil {
+				buff.CanExpire = true
+				buff.Update()
+			}
+
+		}
+	}
 	if toAffects {
 		if info != nil && info.Timer > 0 {
 			toItem.InUse = true
@@ -1319,6 +1478,7 @@ func (c *Character) ReplaceItem(itemID int, where, to int16) ([]byte, error) {
 	return resp, nil
 }
 
+//Discirmination_Items   = utils.Packet{ 0xaa,0x55,0x2e,0x00,0x57,0x0a,0x81,0x25,0xe8,0x05,0x00,0xa2,0x01,0x00,0x00,0x00,0x00,0x02,0xe6,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x55,0xAA}
 func (c *Character) SwapItems(where, to int16) ([]byte, error) {
 
 	sale := FindSale(c.PseudoID)
@@ -1340,6 +1500,9 @@ func (c *Character) SwapItems(where, to int16) ([]byte, error) {
 	toItem := invSlots[to]
 
 	if whereItem.ItemID == 0 || toItem.ItemID == 0 {
+		return nil, nil
+	}
+	if where == 317 || where == 318 || where == 319 {
 		return nil, nil
 	}
 
@@ -1393,7 +1556,21 @@ func (c *Character) SwapItems(where, to int16) ([]byte, error) {
 	resp.Insert(utils.IntToBytes(uint64(where), 2, true), 23) // where slot
 
 	whereAffects, toAffects := DoesSlotAffectStats(where), DoesSlotAffectStats(to)
+	//whereItemInfo := Items[whereItem.ItemID]
+	if toItem.ItemID != 0 {
+		toIteminfo := Items[int64(toItem.ItemID)]
+		if toIteminfo.ItemBuff != 0 {
+			buff, err := FindBuffByID(int(toIteminfo.ItemBuff), c.ID)
+			if err != nil {
+				return nil, err
+			}
+			if buff != nil {
+				buff.CanExpire = true
+				buff.Update()
+			}
 
+		}
+	}
 	if whereAffects {
 		item := whereItem // new item
 		info := Items[int64(item.ItemID)]
@@ -1505,7 +1682,6 @@ func (c *Character) SplitItem(where, to, quantity uint16) ([]byte, error) {
 
 	return nil, nil
 }
-
 func (c *Character) GetHPandChi() []byte {
 	hpChi := HP_CHI
 	stat := c.Socket.Stats
@@ -1683,7 +1859,9 @@ func (c *Character) PetHandler() {
 			pet.IsOnline = false
 			return
 		}
+		if c.AidMode {
 
+		}
 		if pet.Target == 0 && pet.Loyalty >= 10 {
 			pet.Target, err = pet.FindTargetMobID(c) // 75% chance to trigger
 			if err != nil {
@@ -1704,7 +1882,12 @@ func (c *Character) PetHandler() {
 			} else if pet.Fullness >= 25 && pet.Loyalty < 100 {
 				pet.Loyalty++
 			}
-
+		}
+		cPetLevel := int(pet.Level)
+		if c.Epoch%20 == 0 {
+			if pet.HP < pet.MaxHP {
+				pet.HP = int(math.Min(float64(pet.HP+cPetLevel*3), float64(pet.MaxHP)))
+			}
 			pet.RefreshStats = true
 		}
 
@@ -1722,6 +1905,9 @@ func (c *Character) PetHandler() {
 		}
 
 	BEGIN:
+		if pet.PetCombatMode == 2 {
+			pet.Target = c.Selection
+		}
 		if pet.Target == 0 { // Idle mode
 
 			ownerPos := ConvertPointToLocation(c.Coordinate)
@@ -1745,51 +1931,94 @@ func (c *Character) PetHandler() {
 			}
 
 		} else { // Target mode
-			mob, ok := GetFromRegister(c.Socket.User.ConnectedServer, c.Map, uint16(pet.Target)).(*AI)
-			if !ok || mob == nil {
-				pet.Target = 0
-				goto OUT
+			if pet.PetCombatMode == 2 {
+				mob := FindCharacterByPseudoID(c.Socket.User.ConnectedServer, uint16(pet.Target))
+				if mob.Socket.Stats.HP <= 0 || !c.CanAttack(mob) {
+					pet.Target = 0
+					time.Sleep(time.Second)
+					goto BEGIN
+				}
+				aiCoordinate := ConvertPointToLocation(mob.Coordinate)
+				distance := utils.CalculateDistance(&pet.Coordinate, aiCoordinate)
 
-			} else if mob.HP <= 0 {
-				pet.Target = 0
-				time.Sleep(time.Second)
-				goto BEGIN
-			}
+				if distance <= 3 && pet.LastHit%2 == 0 { // attack
+					seed := utils.RandInt(1, 1000)
+					r := utils.Packet{}
+					skill, ok := SkillInfos[petInfo.SkillID]
+					if seed < 500 && ok && pet.CHI >= skill.BaseChi {
+						r.Concat(pet.CastSkill(c))
+					} else {
+						r.Concat(pet.PlayerAttack(c))
+					}
 
-			aiCoordinate := ConvertPointToLocation(mob.Coordinate)
-			distance := utils.CalculateDistance(&pet.Coordinate, aiCoordinate)
+					p := nats.CastPacket{CastNear: true, PetID: pet.PseudoID, Data: r, Type: nats.MOB_ATTACK}
+					p.Cast()
+					pet.LastHit++
 
-			if distance <= 3 && pet.LastHit%2 == 0 { // attack
-				seed := utils.RandInt(1, 1000)
-				r := utils.Packet{}
-				skill, ok := SkillInfos[petInfo.SkillID]
-				if seed < 500 && ok && pet.CHI >= skill.BaseChi {
-					r.Concat(pet.CastSkill(c))
+				} else if distance > 3 && distance <= 50 { // chase
+					pet.IsMoving = true
+					target := GeneratePoint(aiCoordinate)
+					pet.TargetLocation = target
+					speed := float64(10.0)
+
+					token := pet.MovementToken
+					for token == pet.MovementToken {
+						pet.MovementToken = utils.RandInt(1, math.MaxInt64)
+					}
+
+					go pet.MovementHandler(pet.MovementToken, &pet.Coordinate, &target, speed)
+					pet.LastHit = 0
+
 				} else {
-					r.Concat(pet.Attack(c))
+					pet.LastHit++
 				}
-
-				p := nats.CastPacket{CastNear: true, PetID: pet.PseudoID, Data: r, Type: nats.MOB_ATTACK}
-				p.Cast()
-				pet.LastHit++
-
-			} else if distance > 3 && distance <= 50 { // chase
-				pet.IsMoving = true
-				target := GeneratePoint(aiCoordinate)
-				pet.TargetLocation = target
-				speed := float64(10.0)
-
-				token := pet.MovementToken
-				for token == pet.MovementToken {
-					pet.MovementToken = utils.RandInt(1, math.MaxInt64)
-				}
-
-				go pet.MovementHandler(pet.MovementToken, &pet.Coordinate, &target, speed)
-				pet.LastHit = 0
-
 			} else {
-				pet.LastHit++
+				mob, ok := GetFromRegister(c.Socket.User.ConnectedServer, c.Map, uint16(pet.Target)).(*AI)
+				if !ok || mob == nil {
+					pet.Target = 0
+					goto OUT
+
+				} else if mob.HP <= 0 {
+					pet.Target = 0
+					time.Sleep(time.Second)
+					goto BEGIN
+				}
+				aiCoordinate := ConvertPointToLocation(mob.Coordinate)
+				distance := utils.CalculateDistance(&pet.Coordinate, aiCoordinate)
+
+				if distance <= 3 && pet.LastHit%2 == 0 { // attack
+					seed := utils.RandInt(1, 1000)
+					r := utils.Packet{}
+					skill, ok := SkillInfos[petInfo.SkillID]
+					if seed < 500 && ok && pet.CHI >= skill.BaseChi {
+						r.Concat(pet.CastSkill(c))
+					} else {
+						r.Concat(pet.Attack(c))
+					}
+
+					p := nats.CastPacket{CastNear: true, PetID: pet.PseudoID, Data: r, Type: nats.MOB_ATTACK}
+					p.Cast()
+					pet.LastHit++
+
+				} else if distance > 3 && distance <= 50 { // chase
+					pet.IsMoving = true
+					target := GeneratePoint(aiCoordinate)
+					pet.TargetLocation = target
+					speed := float64(10.0)
+
+					token := pet.MovementToken
+					for token == pet.MovementToken {
+						pet.MovementToken = utils.RandInt(1, math.MaxInt64)
+					}
+
+					go pet.MovementHandler(pet.MovementToken, &pet.Coordinate, &target, speed)
+					pet.LastHit = 0
+
+				} else {
+					pet.LastHit++
+				}
 			}
+
 		}
 
 		petSlot.Update()
@@ -1810,8 +2039,7 @@ func (c *Character) HandleBuffs() {
 	}
 
 	stat := c.Socket.Stats
-
-	if buff := buffs[0]; buff.StartedAt+buff.Duration <= c.Epoch { // buff expired
+	if buff := buffs[0]; buff.StartedAt+buff.Duration <= c.Epoch && buff.CanExpire { // buff expired
 		stat.MinATK -= buff.ATK
 		stat.MaxATK -= buff.ATK
 		stat.ATKRate -= buff.ATKRate
@@ -1885,14 +2113,18 @@ func (c *Character) HandleBuffs() {
 			continue
 		}
 
-		remainingTime := buff.StartedAt + buff.Duration - c.Epoch
+		remainingTime := int64(0)
+		if buff.CanExpire {
+			remainingTime = buff.StartedAt + buff.Duration - c.Epoch
+		} else {
+			remainingTime = 0
+		}
 		data := BUFF_INFECTION
 		data.Insert(utils.IntToBytes(uint64(infection.ID), 4, true), 6)   // infection id
 		data.Insert(utils.IntToBytes(uint64(remainingTime), 4, true), 11) // buff remaining time
 
 		c.Socket.Write(data)
 	}
-
 }
 
 func (c *Character) HandleLimitedItems() {
@@ -1972,6 +2204,15 @@ func (c *Character) HandleLimitedItems() {
 	}
 }
 
+func (c *Character) makeCharacterMorphed(npcID uint64, activateState bool) []byte {
+
+	resp := FORM_ACTIVATED
+	resp.Insert(utils.IntToBytes(uint64(npcID), 4, true), 5) // form npc id
+	c.Socket.Write(resp)
+
+	return resp
+}
+
 func (c *Character) RespawnCounter(seconds byte) {
 
 	resp := RESPAWN_COUNTER
@@ -2031,6 +2272,210 @@ func (c *Character) ActivityStatus(remainingTime int) {
 	}
 }
 
+func contains(v int64, a []int64) bool {
+	for _, i := range a {
+		if i == v {
+			return true
+		}
+	}
+	return false
+}
+
+func unorderedEqual(first, second []int64, count int) bool {
+	exists := make(map[int64]bool)
+	match := 0
+	for _, value := range first {
+		exists[value] = true
+	}
+	for _, value := range second {
+		if match >= count {
+			return true
+		}
+		if !exists[value] {
+			return false
+		}
+		match++
+	}
+	return true
+}
+
+func BonusActive(first, second []int64) bool {
+	exists := make(map[int64]bool)
+	for _, value := range first {
+		exists[value] = true
+	}
+	for _, value := range second {
+		if !exists[value] {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Character) ItemSetEffects(indexes []int16) []int64 {
+	//	log.Printf("Bejön ide")
+	slots, _ := c.InventorySlots()
+	playerItems := []int64{}
+	for _, i := range indexes {
+		if (i == 3 && c.WeaponSlot == 4) || (i == 4 && c.WeaponSlot == 3) {
+			continue
+		}
+		item := slots[i]
+		playerItems = append(playerItems, item.ItemID)
+	}
+	setEffect := []int64{}
+	for _, i := range playerItems {
+		for _, sets := range ItemSets {
+			if contains(i, sets.GetSetItems()) {
+				if unorderedEqual(playerItems, sets.GetSetItems(), sets.SetItemCount) {
+					buffEffects := sets.GetSetBonus()
+					for _, effect := range buffEffects {
+						if effect == 0 || effect == 616 || effect == 617 {
+							continue
+						}
+						if !contains(effect, setEffect) {
+							setEffect = append(setEffect, effect)
+						}
+					}
+				}
+			}
+		}
+	}
+	return setEffect
+}
+func (c *Character) applySetEffect(bonuses []int64, st *Stat) {
+	additionalDropMultiplier, additionalExpMultiplier, additionalRunningSpeed := float64(0), float64(0), float64(0)
+	for _, id := range bonuses {
+		item := Items[id]
+		if item == nil {
+			continue
+		}
+
+		st.STRBuff += item.STR
+		st.DEXBuff += item.DEX
+		st.INTBuff += item.INT
+		st.WindBuff += item.Wind
+		st.WaterBuff += item.Water
+		st.FireBuff += item.Fire
+
+		st.DEF += item.Def + ((item.BaseDef1 + item.BaseDef2 + item.BaseDef3) / 3)
+		st.DefRate += item.DefRate
+
+		st.ArtsDEF += item.ArtsDef
+		st.ArtsDEFRate += item.ArtsDefRate
+
+		st.MaxHP += item.MaxHp
+		st.MaxCHI += item.MaxChi
+
+		st.Accuracy += item.Accuracy
+		st.Dodge += item.Dodge
+
+		st.MinATK += item.BaseMinAtk + item.MinAtk
+		st.MaxATK += item.BaseMaxAtk + item.MaxAtk
+		st.ATKRate += item.AtkRate
+
+		st.MinArtsATK += item.MinArtsAtk
+		st.MaxArtsATK += item.MaxArtsAtk
+		st.ArtsATKRate += item.ArtsAtkRate
+		additionalExpMultiplier += item.ExpRate
+		additionalDropMultiplier += item.DropRate
+		additionalRunningSpeed += item.RunningSpeed
+
+		st.ConfusionATK += item.ConfusionATK
+		st.ConfusionDEF += item.ConfusionDEF
+		st.PoisonATK += item.PoisonATK
+		st.PoisonDEF += item.PoisonDEF
+		st.ConfusionATK += item.ConfusionATK
+		st.ConfusionDEF += item.ConfusionDEF
+	}
+	c.AdditionalExpMultiplier += additionalExpMultiplier
+	c.AdditionalDropMultiplier += additionalDropMultiplier
+	c.AdditionalRunningSpeed += additionalRunningSpeed
+}
+func (c *Character) NewBuffInfection(infectionID int64, seconds int) {
+
+	character := c
+	infection := BuffInfections[int(infectionID)]
+	duration := 0
+	plus := 1
+
+	buff, err := FindBuffByID(int(infectionID), character.ID)
+
+	if buff != nil && err == nil {
+		id := buff.ID
+		buff = &Buff{ID: id, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: infection.Name,
+			ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
+			ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef,
+			DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX, HPRecoveryRate: infection.HPRecoveryRate, INT: infection.INT,
+			MaxHP: infection.MaxHP, ParalysisDEF: infection.ParalysisDef, PoisonDEF: infection.ParalysisDef, STR: infection.STR, Accuracy: infection.Accuracy * int(plus), Dodge: infection.DodgeRate * int(plus), CanExpire: false}
+		buff.Update()
+
+	} else if buff == nil && err == nil {
+		buff = &Buff{ID: int(infectionID), CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: infection.Name,
+			ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
+			ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef,
+			DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX, HPRecoveryRate: infection.HPRecoveryRate, INT: infection.INT,
+			MaxHP: infection.MaxHP, ParalysisDEF: infection.ParalysisDef, PoisonDEF: infection.ParalysisDef, STR: infection.STR, Accuracy: infection.Accuracy * int(plus), Dodge: infection.DodgeRate * int(plus), CanExpire: false}
+		err := buff.Create()
+		if err != nil {
+			fmt.Println("BUFF ADD ERROR: ", err)
+			//	return nil, err
+		}
+		data, _ := c.GetStats()
+		c.Socket.Write(data)
+	}
+}
+func (c *Character) applyJudgementEffect(inventoryItem *InventorySlot, st *Stat) {
+	bonusID := inventoryItem.JudgementStat
+	item := ItemJudgements[int(bonusID)]
+	itemInfo := Items[inventoryItem.ItemID]
+	if itemInfo.STR > 0 {
+		st.STRBuff += item.StrPlus
+	}
+	if itemInfo.DEX > 0 {
+		st.DEXBuff += item.DexPlus
+	}
+	if itemInfo.INT > 0 {
+		st.INTBuff += item.IntPlus
+	}
+	if itemInfo.Wind > 0 {
+		st.WindBuff += item.WindPlus
+	}
+	if itemInfo.Water > 0 {
+		st.WaterBuff += item.WaterPlus
+	}
+	if itemInfo.Fire > 0 {
+		st.FireBuff += item.FirePlus
+	}
+
+	if itemInfo.Def > 0 {
+		st.DEF += item.ExtraDef
+	}
+	if itemInfo.ArtsDef > 0 {
+		st.ArtsDEF += item.ExtraArtsDef
+	}
+	if itemInfo.MaxHp > 0 {
+		st.MaxHP += item.MaxHP
+	}
+	if itemInfo.MaxChi > 0 {
+		st.MaxCHI += item.MaxChi
+	}
+	if itemInfo.Accuracy > 0 {
+		st.Accuracy += item.AccuracyPlus
+	}
+	if itemInfo.Dodge > 0 {
+		st.Dodge += item.ExtraDodge
+	}
+	if itemInfo.MinAtk > 0 {
+		st.MinATK += item.AttackPlus
+		st.MaxATK += item.AttackPlus
+	}
+	//st.ATKRate += item.AtkRate
+
+	//st.MinArtsATK += item.MinArtsAtk
+	//st.MaxArtsATK += item.MaxArtsAtk
+	//st.ArtsATKRate += item.ArtsAtkRate
+}
 func (c *Character) ItemEffects(st *Stat, start, end int16) error {
 
 	slots, err := c.InventorySlots()
@@ -2050,8 +2495,70 @@ func (c *Character) ItemEffects(st *Stat, start, end int16) error {
 			indexes = append(indexes, i)
 		}
 	}
+	// Handle Items Equpped in wrong slot
+	if start == 0 && end == 9 || start == 307 && end == 315 || start == 397 && end == 399 || start == 400 && end == 4001 {
+		for i := start; i <= end; i++ {
+			sl := slots[i]
+			item := Items[sl.ItemID]
+
+			if item != nil && int16(item.Slot) != i && sl.SlotID != 0 && item.Slot != 3 {
+
+				f, err := os.OpenFile("AntiSlotExploit/"+c.Name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) //log file
+				if err != nil {
+					log.Fatalf("error opening file: %v", err)
+				}
+				fi, err := os.OpenFile("Log.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) //log file
+				if err != nil {
+					log.Fatalf("error opening file: %v", err)
+				}
+				defer f.Close()
+				log.SetOutput(f)
+				log.Print(sl)
+
+				//delete item
+				data := c.DecrementItem(i, sl.Quantity)
+				c.Socket.Write(*data)
+				c.Update()
+				sl.Update()
+				log.SetOutput(fi)
+			}
+		}
+	}
+	// Handle Items Equpped in wrong slot
+	start2 := start
+	start3 := start
+	start2 = 317
+	start3 = 319
+	for i := start2; i <= start3; i++ {
+		sl := slots[i]
+		item := Items[sl.ItemID]
+
+		if item != nil && int16(item.Slot) != i && sl.SlotID != 0 && item.Slot != 3 {
+
+			f, err := os.OpenFile("AntiSlotExploit/"+c.Name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) //log file
+			if err != nil {
+				log.Fatalf("error opening file: %v", err)
+			}
+			fi, err := os.OpenFile("Log.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) //log file
+			if err != nil {
+				log.Fatalf("error opening file: %v", err)
+			}
+			defer f.Close()
+			log.SetOutput(f)
+			log.Print(sl)
+
+			//delete item
+			data := c.DecrementItem(i, sl.Quantity)
+			c.Socket.Write(*data)
+			c.Update()
+			sl.Update()
+			log.SetOutput(fi)
+		}
+	}
 
 	additionalDropMultiplier, additionalExpMultiplier, additionalRunningSpeed := float64(0), float64(0), float64(0)
+	setEffects := c.ItemSetEffects(indexes)
+	c.applySetEffect(setEffects, st)
 	for _, i := range indexes {
 		if (i == 3 && c.WeaponSlot == 4) || (i == 4 && c.WeaponSlot == 3) {
 			continue
@@ -2071,9 +2578,20 @@ func (c *Character) ItemEffects(st *Stat, start, end int16) error {
 				!(start == 0x0B || start == 0x155) {
 				continue
 			}
+			if Items[item.ItemID].ItemBuff != 0 { // item buff (aura)
+				//if c.HTVisibility&0x04 != 0 {
+				c.NewBuffInfection(int64(Items[item.ItemID].ItemBuff), 2)
+				//}
+
+				/*time.AfterFunc(time.Second*1, func() {
+					c.ItemEffects(st, start, end)
+				})*/
+			}
 
 			ids := []int64{item.ItemID}
-
+			if item.ItemType != 0 {
+				c.applyJudgementEffect(item, st)
+			}
 			for _, u := range item.GetUpgrades() {
 				if u == 0 {
 					break
@@ -2087,7 +2605,6 @@ func (c *Character) ItemEffects(st *Stat, start, end int16) error {
 				}
 				ids = append(ids, int64(s))
 			}
-
 			for _, id := range ids {
 				item := Items[id]
 				if item == nil {
@@ -2123,6 +2640,13 @@ func (c *Character) ItemEffects(st *Stat, start, end int16) error {
 				additionalExpMultiplier += item.ExpRate
 				additionalDropMultiplier += item.DropRate
 				additionalRunningSpeed += item.RunningSpeed
+
+				st.ConfusionATK += item.ConfusionATK
+				st.ConfusionDEF += item.ConfusionDEF
+				st.PoisonATK += item.PoisonATK
+				st.PoisonDEF += item.PoisonDEF
+				st.ConfusionATK += item.ConfusionATK
+				st.ConfusionDEF += item.ConfusionDEF
 			}
 		}
 	}
@@ -2164,15 +2688,17 @@ func (c *Character) AddExp(amount int64) ([]byte, bool) {
 
 	c.AddingExp.Lock()
 	defer c.AddingExp.Unlock()
-
+	c.Socket.Skills.SkillPoints = 300000
 	expMultipler := c.ExpMultiplier + c.AdditionalExpMultiplier
 	exp := c.Exp + int64(float64(amount)*(expMultipler*EXP_RATE))
 	spIndex := utils.SearchUInt64(SkillPoints, uint64(c.Exp))
-
-	if exp > 233332051410 {
+	canLevelUp := true
+	if exp > 233332051410 && c.Level <= 100 {
 		exp = 233332051410
 	}
-
+	if exp > 544951059310 && c.Level <= 200 {
+		exp = 544951059310
+	}
 	c.Exp = exp
 	spIndex2 := utils.SearchUInt64(SkillPoints, uint64(c.Exp))
 
@@ -2186,28 +2712,47 @@ func (c *Character) AddExp(amount int64) ([]byte, bool) {
 	levelUp := false
 	level := int16(c.Level)
 	targetExp := EXPs[level].Exp
-	skPts, sp := 0, 0
-	for exp >= targetExp && level < 100 { // Levelling up
-		//skPts += EXPs[level].SkillPoints
+	skPts, sp := 3000, 0
+	np := 0                                             //nature pts
+	for exp >= targetExp && level < 300 && canLevelUp { // Levelling up && level < 100
 
-		level++
-		st.HP = st.MaxHP
-		sp += int(level/10) + 4
+		if c.Type <= 59 && level >= 100 {
+			level = 100
+			canLevelUp = false
+		} else if c.Type <= 69 && level >= 200 {
+			level = 200
+			canLevelUp = false
+		} else {
+			level++
+			st.HP = st.MaxHP
+			if EXPs[level] != nil {
+				sp += EXPs[level].StatPoints
+				np += EXPs[level].NaturePoints
+			}
+			targetExp = EXPs[level].Exp
+			levelUp = true
+		}
 
-		targetExp = EXPs[level].Exp
-		levelUp = true
 	}
-
 	c.Level = int(level)
-	skPts = spIndex2 - spIndex
-	c.Socket.Skills.SkillPoints += skPts
-	st.StatPoints += sp
-
 	resp := EXP_SKILL_PT_CHANGED
-	resp.Insert(utils.IntToBytes(uint64(exp), 8, true), 5)                          // character exp
-	resp.Insert(utils.IntToBytes(uint64(c.Socket.Skills.SkillPoints), 4, true), 13) // character skill points
+
+	if level < 101 {
+		skPts = spIndex2 - spIndex
+		c.Socket.Skills.SkillPoints += skPts
+	}
+	//skPts = spIndex2 - spIndex
 
 	if levelUp {
+		if level > 100 {
+			skPts = EXPs[level].SkillPoints
+			c.Socket.Skills.SkillPoints = 1000
+		}
+
+		st.StatPoints += sp
+		st.NaturePoints += np
+		resp.Insert(utils.IntToBytes(uint64(exp), 8, true), 5)                          // character exp
+		resp.Insert(utils.IntToBytes(uint64(c.Socket.Skills.SkillPoints), 4, true), 13) // character skill points
 		if c.GuildID > 0 {
 			guild, err := FindGuildByID(c.GuildID)
 			if err == nil && guild != nil {
@@ -2219,18 +2764,19 @@ func (c *Character) AddExp(amount int64) ([]byte, bool) {
 		resp.Concat(messaging.SystemMessage(messaging.LEVEL_UP_SP))
 		resp.Concat(messaging.InfoMessage(c.GetLevelText()))
 
-		/*
-			spawnData, err := c.SpawnCharacter()
-			if err == nil {
-				resp.Concat(spawnData)
-			}
-		*/
+		spawnData, err := c.SpawnCharacter()
+		if err == nil {
+			c.Socket.Write(spawnData)
+			c.Update()
+			//resp.Concat(spawnData)
+		}
+	} else {
+		resp.Insert(utils.IntToBytes(uint64(exp), 8, true), 5)                          // character exp
+		resp.Insert(utils.IntToBytes(uint64(c.Socket.Skills.SkillPoints), 4, true), 13) // character skill points
 	}
-
 	go c.Socket.Skills.Update()
 	return resp, levelUp
 }
-
 func (c *Character) CombineItems(where, to int16) (int64, int16, error) {
 
 	invSlots, err := c.InventorySlots()
@@ -2280,7 +2826,8 @@ func (c *Character) BankItems() []byte {
 		resp.Insert([]byte{0x00, 0xA1, 0x01, 0x00}, index)
 		index += 4
 
-		resp.Insert(utils.IntToBytes(uint64(i+0x43), 2, true), index) // slot id
+		test := 67 + i
+		resp.Insert(utils.IntToBytes(uint64(test), 2, true), index) // slot id
 		index += 2
 
 		resp.Insert([]byte{0x00, 0x00, 0x00, 0x00}, index)
@@ -2315,7 +2862,23 @@ func (c *Character) ChangeMap(mapID int16, coordinate *utils.Location, args ...i
 	resp, r := MAP_CHANGED, utils.Packet{}
 	c.Map = mapID
 	c.EndPvP()
-
+	if !c.IsinWar {
+		if coordinate == nil { // if no coordinate then teleport home
+			d := SavePoints[uint8(mapID)]
+			if d == nil {
+				d = &SavePoint{Point: "(100.0,100.0)"}
+			}
+			coordinate = ConvertPointToLocation(d.Point)
+		}
+	} else {
+		if c.Faction == 1 && c.Map != 230 {
+			delete(OrderCharacters, c.ID)
+			c.IsinWar = false
+		} else if c.Faction == 2 && c.Map != 230 {
+			delete(ShaoCharacters, c.ID)
+			c.IsinWar = false
+		}
+	}
 	if coordinate == nil { // if no coordinate then teleport home
 		d := SavePoints[uint8(mapID)]
 		if d == nil {
@@ -2323,8 +2886,8 @@ func (c *Character) ChangeMap(mapID int16, coordinate *utils.Location, args ...i
 		}
 		coordinate = ConvertPointToLocation(d.Point)
 	}
-
-	if funk.Contains(sharedMaps, mapID) { // shared map
+	servers, _ := GetServers()
+	if funk.Contains(sharedMaps, mapID) && !servers[int16(c.Socket.User.ConnectedServer)-1].IsPVPServer { // shared map
 		c.Socket.User.ConnectedServer = 1
 	}
 
@@ -2395,7 +2958,32 @@ func (c *Character) ChangeMap(mapID int16, coordinate *utils.Location, args ...i
 	resp.Concat(c.Socket.User.GetTime())
 	return resp, nil
 }
-
+func (c *Character) LosePlayerExp(percent int) (int64, error) {
+	level := int16(c.Level)
+	expminus := int64(0)
+	if level >= 10 {
+		oldExp := EXPs[level-1].Exp
+		resp := EXP_SKILL_PT_CHANGED
+		if oldExp <= c.Exp {
+			per := float64(percent) / 100
+			expLose := float64(c.Exp) * float64(1-per)
+			if int64(expLose) >= oldExp {
+				exp := c.Exp - int64(expLose)
+				expminus = int64(float64(exp) * float64(1-0.30))
+				c.Exp = int64(expLose)
+			} else {
+				exp := c.Exp - oldExp
+				expminus = int64(float64(exp) * float64(1-0.30))
+				c.Exp = oldExp
+			}
+		}
+		resp.Insert(utils.IntToBytes(uint64(c.Exp), 8, true), 5)                        // character exp
+		resp.Insert(utils.IntToBytes(uint64(c.Socket.Skills.SkillPoints), 4, true), 13) // character skill points
+		go c.Socket.Skills.Update()
+		c.Socket.Write(resp)
+	}
+	return expminus, nil
+}
 func DoesSlotAffectStats(slotNo int16) bool {
 	return slotNo < 0x0B || (slotNo >= 0x0133 && slotNo <= 0x013B) || (slotNo >= 0x18D && slotNo <= 0x192)
 }
@@ -2530,7 +3118,7 @@ func (c *Character) GetStats() ([]byte, error) {
 	resp.Insert(utils.IntToBytes(uint64(st.StatPoints), 2, true), index) // stat points
 	index += 2
 
-	resp.Insert([]byte{0x00, 0x00}, index) // divine stat points
+	resp.Insert(utils.IntToBytes(uint64(st.NaturePoints), 2, true), index) // divine stat points
 	index += 2
 
 	resp.Insert(utils.IntToBytes(uint64(c.Socket.Skills.SkillPoints), 4, true), index) // character skill points
@@ -2621,6 +3209,7 @@ func (c *Character) GetStats() ([]byte, error) {
 	index += 2
 
 	resp.Concat(c.GetHPandChi()) // hp and chi
+
 	return resp, nil
 }
 
@@ -2632,13 +3221,20 @@ func (c *Character) BSUpgrade(slotID int64, stones []*InventorySlot, luck, prote
 	}
 
 	item := slots[slotID]
-	if item.Plus >= 8 { // cannot be upgraded more
+	if item.Plus >= 15 { // cannot be upgraded more
 		resp := utils.Packet{0xAA, 0x55, 0x31, 0x00, 0x54, 0x02, 0xA6, 0x0F, 0x01, 0x00, 0xA3, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
 		resp.Insert(utils.IntToBytes(uint64(item.ItemID), 4, true), 9) // item id
 		resp.Insert(utils.IntToBytes(uint64(slotID), 2, true), 17)     // slot id
 		resp.Insert(item.GetUpgrades(), 19)                            // item upgrades
 		resp[34] = byte(item.SocketCount)                              // socket count
 		resp.Insert(item.GetSockets(), 35)                             // item sockets
+		c := 35 + 15
+		if item.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(item.ItemType), 1, true), c-6)
+			if item.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(item.JudgementStat), 4, true), c-5)
+			}
+		}
 
 		return resp, nil
 	}
@@ -2665,7 +3261,9 @@ func (c *Character) BSUpgrade(slotID int64, stones []*InventorySlot, luck, prote
 
 	itemType := info.GetType()
 	typeMatch := (stoneInfo.Type == 190 && itemType == PET_ITEM_TYPE) || (stoneInfo.Type == 191 && itemType == HT_ARMOR_TYPE) ||
-		(stoneInfo.Type == 192 && itemType == ACC_TYPE) || (stoneInfo.Type == 194 && itemType == WEAPON_TYPE) || (stoneInfo.Type == 195 && itemType == ARMOR_TYPE)
+		(stoneInfo.Type == 192 && (itemType == ACC_TYPE || itemType == MASTER_HT_ACC)) && item.ItemType == 0 || (stoneInfo.Type == 194 && itemType == WEAPON_TYPE && item.ItemType == 0) || (stoneInfo.Type == 195 && itemType == ARMOR_TYPE && item.ItemType == 0) ||
+		//DISC ITEMS
+		(stoneInfo.Type == 229 && stoneInfo.HtType == 36 && itemType == WEAPON_TYPE && item.ItemType == 2) || (stoneInfo.Type == 229 && stoneInfo.HtType == 37 && itemType == ARMOR_TYPE && item.ItemType == 2) || (stoneInfo.Type == 229 && stoneInfo.HtType == 38 && (itemType == ACC_TYPE || itemType == MASTER_HT_ACC) && item.ItemType == 2)
 
 	if !typeMatch {
 
@@ -2847,7 +3445,12 @@ func (c *Character) BSProduction(book *InventorySlot, materials []*InventorySlot
 	resp := &utils.Packet{}
 	seed := int(utils.RandInt(0, 1000))
 	if float64(seed) < float64(production.Probability)*luckRate { // Success
-		resp, _, err = c.AddItem(&InventorySlot{ItemID: int64(production.Production), Quantity: 1}, prodSlot, false)
+		itemInfo := Items[int64(production.Production)]
+		quantity := 1
+		if itemInfo.Timer > 0 {
+			quantity = itemInfo.Timer
+		}
+		resp, _, err = c.AddItem(&InventorySlot{ItemID: int64(production.Production), Quantity: uint(quantity)}, prodSlot, false)
 		if err != nil {
 			return nil, err
 		} else if resp == nil {
@@ -2903,7 +3506,12 @@ func (c *Character) AdvancedFusion(items []*InventorySlot, special *InventorySlo
 
 	if float64(seed) < rate { // Success
 		resp := utils.Packet{}
-		itemData, _, err := c.AddItem(&InventorySlot{ItemID: fusion.Production, Quantity: 1}, prodSlot, false)
+		quantity := 1
+		iteminfo := Items[fusion.Production]
+		if iteminfo.Timer > 0 {
+			quantity = iteminfo.Timer
+		}
+		itemData, _, err := c.AddItem(&InventorySlot{ItemID: fusion.Production, Quantity: uint(quantity)}, prodSlot, false)
 		if err != nil {
 			return nil, false, err
 		} else if itemData == nil {
@@ -3168,7 +3776,8 @@ func (c *Character) CreateSocket(item, special *InventorySlot, itemSlot, special
 
 		resp.Concat(*c.DecrementItem(specialSlot, 1))
 	}
-
+	item.SocketCount = socketCount
+	item.Update()
 	resp.Concat(item.CreateSocket(itemSlot, socketCount))
 	resp.Concat(c.GetGold())
 	return resp, nil
@@ -3234,6 +3843,54 @@ func (c *Character) UpgradeSocket(item, socket, special, edit *InventorySlot, it
 		resp.Concat(*c.DecrementItem(editSlot, 1))
 	}
 
+	return resp, nil
+}
+
+func (c *Character) CoProduction(craftID, bFinished int) ([]byte, error) {
+	resp := utils.Packet{0xAA, 0x55, 0x05, 0x00, 0x54, 0x20, 0x0a, 0x00, 0x00, 0x55, 0xAA}
+	resp.Concat(utils.Packet{0xAA, 0x55, 0x28, 0x00, 0x16, 0x2d, 0x03, 0x2d, 0x03, 0xfe, 0x9a, 0x00, 0x00, 0x83, 0x1b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x54, 0x83, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x55, 0xAA})
+	if bFinished == 1 {
+		production := CraftItems[int(craftID)]
+		prodMaterials, err := production.GetMaterials()
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < len(prodMaterials); i++ {
+			if int64(prodMaterials[i].ID) == 0 {
+				break
+			} else {
+				slotID, _, _ := c.FindItemInInventory(nil, int64(prodMaterials[i].ID))
+				matCount := uint(prodMaterials[i].Count)
+				if _, ok := Relics[prodMaterials[i].ID]; !ok { // relic drop
+					itemData := c.DecrementItem(slotID, matCount)
+					c.Socket.Write(*itemData)
+				}
+			}
+		}
+		cost := uint64(production.Cost)
+		c.Gold -= cost
+		resp.Concat(c.GetGold())
+		//log.Printf("Item deleted")
+		slots, err := c.InventorySlots()
+		if err != nil {
+		}
+		index := 0
+		seed := int(utils.RandInt(0, 1000))
+		probabilities := production.GetProbabilities()
+		for _, prob := range probabilities {
+			if float64(seed) > float64(prob) {
+				index++
+				continue
+			}
+			break
+		}
+		craftedItems := production.GetItems()
+		reward := NewSlot()
+		reward.ItemID = int64(craftedItems[index])
+		reward.Quantity = 1
+		_, slot, _ := c.AddItem(reward, -1, true)
+		resp.Concat(slots[slot].GetData(slot))
+	}
 	return resp, nil
 }
 
@@ -3678,7 +4335,7 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 			return []byte{0xAA, 0x55, 0x04, 0x00, 0x59, 0x04, 0xFA, 0x03, 0x55, 0xAA}, nil // FIX: Already Exists => Already have the same effect
 		}
 
-		buff = &Buff{ID: int(item.ItemID), CharacterID: c.ID, Name: info.Name, BagExpansion: true, StartedAt: c.Epoch, Duration: int64(info.Timer) * 60}
+		buff = &Buff{ID: int(item.ItemID), CharacterID: c.ID, Name: info.Name, BagExpansion: true, StartedAt: c.Epoch, Duration: int64(info.Timer) * 60, CanExpire: true}
 		err = buff.Create()
 		if err != nil {
 			return nil, err
@@ -3702,7 +4359,7 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 		}
 
 		buff = &Buff{ID: int(item.ItemID), CharacterID: c.ID, Name: info.Name, EXPMultiplier: 30, DropMultiplier: 5, DEFRate: 5, ArtsDEFRate: 5,
-			ATKRate: 4, ArtsATKRate: 4, StartedAt: c.Epoch, Duration: 2592000}
+			ATKRate: 4, ArtsATKRate: 4, StartedAt: c.Epoch, Duration: 2592000, CanExpire: true}
 		err = buff.Create()
 		if err != nil {
 			return nil, err
@@ -3732,7 +4389,7 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 		}
 
 		buff = &Buff{ID: int(item.ItemID), CharacterID: c.ID, Name: info.Name, EXPMultiplier: 60, DropMultiplier: 10, DEFRate: 15, ArtsDEFRate: 15,
-			ATKRate: 8, ArtsATKRate: 8, StartedAt: c.Epoch, Duration: 2592000}
+			ATKRate: 8, ArtsATKRate: 8, StartedAt: c.Epoch, Duration: 2592000, CanExpire: true}
 		err = buff.Create()
 		if err != nil {
 			return nil, err
@@ -3750,7 +4407,10 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 
 		c.InvMutex.Lock()
 		defer c.InvMutex.Unlock()
-
+		_, err := c.FindFreeSlots(1)
+		if err != nil {
+			goto FALLBACK
+		}
 		gambling := GamblingItems[int(item.ItemID)]
 		if gambling == nil || gambling.Cost > c.Gold { // FIX Gambling null
 			resp := utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x59, 0x08, 0xF9, 0x03, 0x55, 0xAA} // not enough gold
@@ -3855,6 +4515,9 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 				}
 			}
 
+			if int(rewardInfo.TimerType) > 0 || rewardInfo.Timer > 0 {
+				quantity = uint(rewardInfo.Timer)
+			}
 			item := &InventorySlot{ItemID: rewardInfo.ID, Plus: uint8(plus), Quantity: quantity}
 			item.SetUpgrades(upgs)
 
@@ -3862,7 +4525,7 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 				petInfo := Pets[int64(rewardInfo.ID)]
 				petExpInfo := PetExps[int16(petInfo.Level)]
 
-				targetExps := []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt}
+				targetExps := []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt, petExpInfo.ReqExpDivEvo1, petExpInfo.ReqExpDivEvo2, petExpInfo.ReqExpDivEvo3}
 				item.Pet = &PetSlot{
 					Fullness: 100, Loyalty: 100,
 					Exp:   uint64(targetExps[petInfo.Evolution-1]),
@@ -3890,9 +4553,9 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 		}
 
 	case PASSIVE_SKILL_BOOK_TYPE:
-		if info.CharacterType > 0 && !canUse { // invalid character type
+		/*if !canUse { // invalid character type
 			return INVALID_CHARACTER_TYPE, nil
-		}
+		}*/
 
 		skills, err := FindSkillsByID(c.ID)
 		if err != nil {
@@ -3989,7 +4652,7 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 		return resp, nil
 
 	case SKILL_BOOK_TYPE:
-		if info.CharacterType > 0 && !canUse { // invalid character type
+		if !canUse { // invalid character type
 			return INVALID_CHARACTER_TYPE, nil
 		}
 
@@ -4027,6 +4690,7 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 			} else if si := skillInfos[c]; si.Slot == i {
 				tuple := &SkillTuple{SkillID: si.ID, Plus: 0}
 				set.Skills = append(set.Skills, tuple)
+
 				c++
 			} else {
 				set.Skills = append(set.Skills, &SkillTuple{SkillID: 0, Plus: 0})
@@ -4034,6 +4698,10 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 		}
 
 		skillSlots.Slots[i] = set
+		divtuple := &DivineTuple{DivineID: 0, DivinePlus: 0}
+		div2tuple := &DivineTuple{DivineID: 1, DivinePlus: 0}
+		div3tuple := &DivineTuple{DivineID: 2, DivinePlus: 0}
+		set.DivinePoints = append(set.DivinePoints, divtuple, div2tuple, div3tuple)
 		skills.SetSkills(skillSlots)
 
 		go skills.Update()
@@ -4048,7 +4716,61 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 
 		c.InvMutex.Lock()
 		defer c.InvMutex.Unlock()
-
+		if item.ItemID == 90000304 {
+			if c.Exp >= 544951059310 && c.Level == 200 {
+				c.Type += 10
+				c.Update()
+				c.Socket.Skills.Delete()
+				c.Socket.Skills.Create(c)
+				c.Socket.Skills.SkillPoints = 300000
+				c.Update()
+				data, levelUp := c.AddExp(10)
+				if levelUp {
+					skillsData, err := c.Socket.Skills.GetSkillsData()
+					resp.Concat(skillsData)
+					if err == nil && c.Socket != nil {
+						c.Socket.Write(skillsData)
+					}
+					statData, err := c.GetStats()
+					if err == nil && c.Socket != nil {
+						c.Socket.Write(statData)
+					}
+				}
+				if c.Socket != nil {
+					c.Socket.Write(data)
+				}
+				goto DARKBACK
+			}
+			goto FALLBACK
+		}
+		if item.ItemID == 13000015 || item.ItemID == 13000037 || item.ItemID == 13000060 {
+			c.AidTime += 7200 //120 perc
+			stData, _ := c.GetStats()
+			resp.Concat(stData)
+			resp.Concat(*c.DecrementItem(slotID, 1))
+			return resp, nil
+		}
+		if item.ItemID == 13000074 {
+			c.AidTime += 14400 //240 perc
+			stData, _ := c.GetStats()
+			resp.Concat(stData)
+			resp.Concat(*c.DecrementItem(slotID, 1))
+			return resp, nil
+		}
+		if item.ItemID == 13000011 {
+			c.AidTime += 7200 //360 perc
+			stData, _ := c.GetStats()
+			resp.Concat(stData)
+			resp.Concat(*c.DecrementItem(slotID, 1))
+			return resp, nil
+		}
+		if item.ItemID == 13000012 || item.ItemID == 14000008 {
+			c.AidTime += 86400 //360 perc
+			stData, _ := c.GetStats()
+			resp.Concat(stData)
+			resp.Concat(*c.DecrementItem(slotID, 1))
+			return resp, nil
+		}
 		gambling := GamblingItems[int(item.ItemID)]
 		d := Drops[gambling.DropID]
 		items := d.GetItems()
@@ -4156,6 +4878,22 @@ func (c *Character) UseConsumable(item *InventorySlot, slotID int16) ([]byte, er
 FALLBACK:
 	resp.Concat(*c.DecrementItem(slotID, 0))
 	return resp, nil
+DARKBACK:
+	resp.Concat(*c.DecrementItem(item.SlotID, 1))
+	c.Socket.Write(resp)
+
+	ATARAXIA := utils.Packet{0xAA, 0x55, 0x05, 0x00, 0x57, 0x21, 0x0a, 0x00, 0x01, 0x55, 0xAA}
+	c.Socket.Write(ATARAXIA)
+
+	CHARACTER_MENU := utils.Packet{0xAA, 0x55, 0x03, 0x00, 0x09, 0x09, 0x00, 0x55, 0xAA}
+	resp = CHARACTER_MENU
+
+	time.AfterFunc(time.Duration(100*time.Second), func() {
+		CharacterSelect := utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x01, 0x05, 0x0A, 0x00, 0x55, 0xAA}
+
+		resp.Concat(CharacterSelect)
+	})
+	return resp, nil
 }
 
 func (c *Character) CanUse(t int) bool {
@@ -4169,7 +4907,45 @@ func (c *Character) CanUse(t int) bool {
 		return true
 	} else if c.Type == 0x39 && (t == 0x39 || t == 0x3A) { //FEMALE_ROD
 		return true
+	} else if c.Type == 0x32 && (t == 0x32 || t == 0x33) { //Beast
+		return true
+	} else if c.Type == 0x33 && (t == 0x33 || t == 0x32) { //empress
+		return true
+	} else if c.Type == 0x3D && (t == 0x3D || t == 0x3C) { //Divine_empress
+		return true
+	} else if c.Type == 0x3C && (t == 0x3C || t == 0x3D) { //Divine_Beast
+		return true
+	} else if c.Type == 0x46 && (t == 0x46 || t == 0x47) { //Darkness_Beast
+		return true
+	} else if c.Type == 0x47 && (t == 0x47 || t == 0x46) { //Darkness_Empress
+		return true
 	} else if c.Type == 0x3B && t == 0x3B { //DUAL_BLADE
+		return true
+	} else if c.Type == 0x3E && t == 0x3E { //DIVINE MONK
+		return true
+	} else if c.Type == 0x3F && (t == 0x3F || t == 0x41) { //DIVINE MALE_BLADE
+		return true
+	} else if c.Type == 0x40 && (t == 0x40 || t == 0x41) { //DIVINE FEMALE_BLADE
+		return true
+	} else if c.Type == 0x42 && (t == 0x42 || t == 0x44) { //DIVINE MALE_AXE
+		return true
+	} else if c.Type == 0x43 && (t == 0x43 || t == 0x44) { //DIVINE FEMALE_ROD
+		return true
+	} else if c.Type == 0x45 && t == 0x45 { //DIVINE Dual Sword
+		return true
+	} else if c.Type == 0x48 && t == 0x48 { //DARK LORD MONK
+		return true
+	} else if c.Type == 0x49 && (t == 0x49 || t == 0x4B) { //DARK LORD MALE_BLADE
+		return true
+	} else if c.Type == 0x4A && (t == 0x4A || t == 0x4B) { //DARK LORD FEMALE_BLADE
+		return true
+	} else if c.Type == 0x4C && (t == 0x4C || t == 0x4E) { //DARK LORD MALE_AXE
+		return true
+	} else if c.Type == 0x4D && (t == 0x4D || t == 0x4E) { //DARK LORD FEMALE_ROD
+		return true
+	} else if c.Type == 0x4F && t == 0x4F { //DARK LORD Dual Sword
+		return true
+	} else if t == 0x0A || t == 0x00 || t == 0x34 || t == 0x20 || t == 0x14 { //All character Type
 		return true
 	}
 
@@ -4196,10 +4972,12 @@ func (c *Character) UpgradeSkill(slotIndex, skillIndex byte) ([]byte, error) {
 	}
 
 	requiredSP := 1
-	if info.ID >= 28000 && info.ID <= 28007 { // 2nd job passives (non-divine)
+	if info.ID >= 28000 && info.ID <= 28007 || info.ID >= 28100 && info.ID <= 28107 { // 2nd job passives (non-divine)
 		requiredSP = SkillPTS["sjp"][skill.Plus]
-	} else if info.ID >= 29000 && info.ID <= 29007 { // 2nd job passives (divine)
-		// FIX HERE
+	} else if info.ID >= 29000 && info.ID <= 29007 || info.ID >= 29100 && info.ID <= 29107 { // 2nd job passives (divine)
+		requiredSP = SkillPTS["dsjp"][skill.Plus]
+	} else if info.ID >= 20193 && info.ID <= 20217 || info.ID >= 20293 && info.ID <= 20317 { // 3nd job passives (darkness)
+		requiredSP = SkillPTS["dsjp"][skill.Plus]
 	}
 
 	if skills.SkillPoints < requiredSP {
@@ -4247,14 +5025,16 @@ func (c *Character) DowngradeSkill(slotIndex, skillIndex byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	//requiredSP := 1
-	if info.ID >= 28000 && info.ID <= 28007 && skill.Plus > 0 { // 2nd job passives (non-divine)
-		//requiredSP = SkillPTS["sjp"][skill.Plus-1]
-	} else if info.ID >= 29000 && info.ID <= 29007 && skill.Plus > 0 { // 2nd job passives (divine)
-		// FIX HERE
+	requiredSP := 1
+	if info.ID >= 28000 && info.ID <= 28007 { // 2nd job passives (non-divine)
+		requiredSP = SkillPTS["sjp"][skill.Plus]
+	} else if info.ID >= 29000 && info.ID <= 29007 { // 2nd job passives (divine)
+		requiredSP = SkillPTS["dsjp"][skill.Plus]
+	} else if info.ID >= 20193 && info.ID <= 20217 { // 3nd job passives (darkness)
+		requiredSP = SkillPTS["dsjp"][skill.Plus]
 	}
 
-	//skills.SkillPoints += requiredSP
+	skills.SkillPoints += requiredSP
 	skill.Plus--
 	resp := SKILL_DOWNGRADED
 	resp[8] = slotIndex
@@ -4274,6 +5054,58 @@ func (c *Character) DowngradeSkill(slotIndex, skillIndex byte) ([]byte, error) {
 	}
 
 	resp.Concat(c.GetExpAndSkillPts())
+	return resp, nil
+}
+func (c *Character) DivineUpgradeSkills(skillIndex, slot int, bookID int64) ([]byte, error) {
+	skills, err := FindSkillsByID(c.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	skillSlots, err := skills.GetSkills()
+	if err != nil {
+		return nil, err
+	}
+	resp := utils.Packet{}
+	//divineID := 0
+	bonusPlus := 0
+	usedPoints := 0
+	for _, skill := range skillSlots.Slots {
+		if skill.BookID == bookID {
+			if len(skill.DivinePoints) == 0 {
+				divtuple := &DivineTuple{DivineID: 0, DivinePlus: 0}
+				div2tuple := &DivineTuple{DivineID: 1, DivinePlus: 0}
+				div3tuple := &DivineTuple{DivineID: 2, DivinePlus: 0}
+				skill.DivinePoints = append(skill.DivinePoints, divtuple, div2tuple, div3tuple)
+				skills.SetSkills(skillSlots)
+				skills.Update()
+			}
+			for _, point := range skill.DivinePoints {
+				usedPoints += point.DivinePlus
+				//if point.DivineID == slot {
+				if usedPoints >= 10 {
+					return nil, nil
+				}
+				//	divineID = point.DivineID
+				if point.DivineID == slot {
+					bonusPlus = point.DivinePlus
+				}
+			}
+			skill.DivinePoints[slot].DivinePlus++
+		}
+	}
+	bonusPlus++
+	resp = DIVINE_SKILL_BOOk
+	resp[8] = byte(skillIndex)
+	index := 9
+	resp.Insert([]byte{byte(slot)}, index) // divine id
+	index++
+	resp.Insert(utils.IntToBytes(uint64(bookID), 4, true), index) // book id
+	index += 4
+	resp.Insert([]byte{byte(bonusPlus)}, index) // divine plus
+	index++
+	skills.SetSkills(skillSlots)
+	skills.Update()
 	return resp, nil
 }
 
@@ -4450,18 +5282,53 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 	user := c.Socket.User
 	skills := c.Socket.Skills
 
-	canCast := false
+	canCast := true
 	skillInfo := SkillInfos[skillID]
 	weapon := slots[c.WeaponSlot]
 	if weapon.ItemID == 0 { // there are some skills which can be casted without weapon such as monk skills
-		if c.Type == MONK || c.Type == DIVINE_MONK {
+		if c.Type == MONK || c.Type == DIVINE_MONK || c.Type == DARKNESS_MONK {
 			canCast = true
+		}
+		if weapon.ItemID == 0 { // there are some skills which can be casted without weapon such as beast king skills
+			if c.Type == BEAST_KING || c.Type == DIVINE_BEAST_KING || c.Type == DARKNESS_BEAST_KING {
+				canCast = true
+			}
+
+			if weapon.ItemID == 0 { // there are some skills which can be casted without weapon such as empress skills
+				if c.Type == EMPRESS || c.Type == DIVINE_EMPRESS || c.Type == DARKNESS_EMPRESS {
+					canCast = true
+				}
+			}
+		}
+
+		if c.Type == BEAST_KING || c.Type == DIVINE_BEAST_KING || c.Type == DARKNESS_BEAST_KING {
+			ok := funk.Contains(Beast_King_Infections, int16(skillInfo.InfectionID))
+			if ok {
+				for _, buffid := range Beast_King_Infections {
+					buff, err := FindBuffByID(int(buffid), c.ID)
+					if buff != nil && err == nil {
+						buff.Delete()
+					}
+				}
+
+			}
+		}
+		if c.Type == EMPRESS || c.Type == DIVINE_EMPRESS || c.Type == DARKNESS_EMPRESS {
+			ok := funk.Contains(Empress_Infections, int16(skillInfo.InfectionID))
+			if ok {
+				for _, buffid := range Empress_Infections {
+					buff, err := FindBuffByID(int(buffid), c.ID)
+					if buff != nil && err == nil {
+						buff.Delete()
+					}
+				}
+
+			}
 		}
 	} else {
 		weaponInfo := Items[weapon.ItemID]
 		canCast = weaponInfo.CanUse(skillInfo.Type)
 	}
-
 	if !canCast {
 		return nil, nil
 	}
@@ -4470,11 +5337,31 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 	if err != nil {
 		return nil, err
 	}
-
+	skillSlots, err := c.Socket.Skills.GetSkills()
+	if err != nil {
+		return nil, err
+	}
+	plusCooldown := 0
+	plusChiCost := 0
+	divinePlus := 0
+	for _, slot := range skillSlots.Slots {
+		if slot.BookID == skillInfo.BookID {
+			for _, points := range slot.DivinePoints {
+				if points.DivineID == 0 && points.DivinePlus > 0 {
+					divinePlus = points.DivinePlus
+					plusChiCost = 50
+				}
+				if points.DivinePlus == 2 && points.DivinePlus > 0 {
+					plusCooldown = 100
+				}
+			}
+		}
+	}
 	t := c.SkillHistory.Get(skillID)
 	if t != nil {
 		castedAt := t.(time.Time)
 		cooldown := time.Duration(skillInfo.Cooldown*1000) * time.Millisecond
+		cooldown -= time.Duration(plusCooldown * divinePlus) //plusCooldown * divinePlus
 		if time.Now().Sub(castedAt) < cooldown {
 			return nil, nil
 		}
@@ -4483,7 +5370,7 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 	c.SkillHistory.Add(skillID, time.Now())
 
 	addChiCost := float64(skillInfo.AdditionalChi*int(plus)) * 2.2 / 3 // some bad words here
-	chiCost := skillInfo.BaseChi + int(addChiCost)
+	chiCost := skillInfo.BaseChi + int(addChiCost) - (plusChiCost * divinePlus)
 	if stat.CHI < chiCost {
 		return nil, nil
 	}
@@ -4494,7 +5381,7 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 	if target := skillInfo.Target; target == 0 || target == 2 { // buff skill
 		character := c
 		if target == 2 {
-			ch, _ := FindCharacterByID(c.Selection)
+			ch := FindCharacterByPseudoID(c.Socket.User.ConnectedServer, uint16(c.Selection))
 			if ch != nil {
 				character = ch
 			}
@@ -4503,25 +5390,78 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 		infection := BuffInfections[skillInfo.InfectionID]
 		duration := (skillInfo.BaseTime + skillInfo.AdditionalTime*int(plus)) / 10
 
+		if character != c && !c.CanAttack(character) { //target other player
+			c.DealInfection(nil, character, skillID)
+		} else if character != c && c.CanAttack(character) { //target other player but is in pvp
+			c.DealInfection(nil, c, skillID)
+		}
+		expire := true
+		if skillInfo.InfectionID != 0 && duration == 0 {
+			expire = false
+		}
 		buff, err := FindBuffByID(infection.ID, character.ID)
 		if err != nil {
 			return nil, err
 		} else if buff != nil {
-			id := buff.ID
-			buff = &Buff{ID: id, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
-				ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
-				ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef,
-				DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX, HPRecoveryRate: infection.HPRecoveryRate, INT: infection.INT,
-				MaxHP: infection.MaxHP, ParalysisDEF: infection.ParalysisDef, PoisonDEF: infection.ParalysisDef, STR: infection.STR}
+			buff.Delete()
+			stat, err = FindStatByID(character.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			err = stat.Calculate()
+			if err != nil {
+				return nil, err
+			}
+			c.HandleBuffs()
+			if infection.IsPercent == false {
+				buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
+					ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
+					ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef + infection.AdditionalConfusionDef*int(plus),
+					DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX + infection.AdditionalDEX*int(plus), HPRecoveryRate: infection.HPRecoveryRate + infection.AdditionalHPRecovery*int(plus), INT: infection.INT + infection.AdditionalINT*int(plus),
+					MaxHP: infection.MaxHP + infection.AdditionalHP*int(plus), ParalysisDEF: infection.ParalysisDef + infection.AdditionalParalysisDef*int(plus), PoisonDEF: infection.ParalysisDef + infection.AdditionalPoisonDef*int(plus), STR: infection.STR + infection.AdditionalSTR*int(plus),
+					Accuracy: infection.Accuracy + infection.AdditionalAccuracy*int(plus), Dodge: infection.DodgeRate + infection.AdditionalDodgeRate*int(plus), RunningSpeed: infection.MovSpeed + infection.AdditionalMovSpeed*float64(plus), CanExpire: expire}
+				buff.Create()
+			} else {
+				percentArtsDEF := int(float64(character.Socket.Stats.ArtsDEF) * (float64(infection.ArtsDEF+infection.AdditionalArtsDEF*int(plus)) / 1000))
+				percentDEF := int(float64(character.Socket.Stats.DEF) * (float64(infection.BaseDef+infection.AdditionalDEF*int(plus)) / 1000))
+				percentATK := int(float64(character.Socket.Stats.MinATK) * (float64(infection.BaseATK+infection.AdditionalATK*int(plus)) / 1000))
+				percentArtsATK := int(float64(character.Socket.Stats.MinArtsATK) * (float64(infection.BaseArtsATK+infection.AdditionalArtsATK*int(plus)) / 1000))
+				buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
+					ATK: percentATK, ArtsATK: percentArtsATK,
+					ArtsDEF: percentArtsDEF, ConfusionDEF: infection.ConfusionDef + infection.AdditionalConfusionDef*int(plus),
+					DEF: percentDEF, DEX: infection.DEX + infection.AdditionalDEX*int(plus), HPRecoveryRate: infection.HPRecoveryRate + infection.AdditionalHPRecovery*int(plus), INT: infection.INT + infection.AdditionalINT*int(plus),
+					MaxHP: infection.MaxHP + infection.AdditionalHP*int(plus), ParalysisDEF: infection.ParalysisDef + infection.AdditionalParalysisDef*int(plus), PoisonDEF: infection.ParalysisDef + infection.AdditionalPoisonDef*int(plus), STR: infection.STR + infection.AdditionalSTR*int(plus),
+					Accuracy: infection.Accuracy + infection.AdditionalAccuracy*int(plus), Dodge: infection.DodgeRate + infection.AdditionalDodgeRate*int(plus), CanExpire: expire}
+				buff.Create()
+			}
 			buff.Update()
 
 		} else if buff == nil {
-			buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
-				ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
-				ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef,
-				DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX, HPRecoveryRate: infection.HPRecoveryRate, INT: infection.INT,
-				MaxHP: infection.MaxHP, ParalysisDEF: infection.ParalysisDef, PoisonDEF: infection.ParalysisDef, STR: infection.STR}
-			buff.Create()
+			c.HandleBuffs()
+			if infection.IsPercent == false {
+				buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
+					ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
+					ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef + infection.AdditionalConfusionDef*int(plus),
+					DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX + infection.AdditionalDEX*int(plus), HPRecoveryRate: infection.HPRecoveryRate + infection.AdditionalHPRecovery*int(plus), INT: infection.INT + infection.AdditionalINT*int(plus),
+					MaxHP: infection.MaxHP + infection.AdditionalHP*int(plus), ParalysisDEF: infection.ParalysisDef + infection.AdditionalParalysisDef*int(plus), PoisonDEF: infection.ParalysisDef + infection.AdditionalPoisonDef*int(plus), STR: infection.STR + infection.AdditionalSTR*int(plus),
+					Accuracy: infection.Accuracy + infection.AdditionalAccuracy*int(plus), Dodge: infection.DodgeRate + infection.AdditionalDodgeRate*int(plus), RunningSpeed: infection.MovSpeed + infection.AdditionalMovSpeed*float64(plus), CanExpire: expire}
+			} else {
+				percentArtsDEF := int(float64(character.Socket.Stats.ArtsDEF) * (float64(infection.ArtsDEF+infection.AdditionalArtsDEF*int(plus)) / 1000))
+				percentDEF := int(float64(character.Socket.Stats.DEF) * (float64(infection.BaseDef+infection.AdditionalDEF*int(plus)) / 1000))
+				percentATK := int(float64(character.Socket.Stats.MinATK) * (float64(infection.BaseATK+infection.AdditionalATK*int(plus)) / 1000))
+				percentArtsATK := int(float64(character.Socket.Stats.MinArtsATK) * (float64(infection.BaseArtsATK+infection.AdditionalArtsATK*int(plus)) / 1000))
+				buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
+					ATK: percentATK, ArtsATK: percentArtsATK,
+					ArtsDEF: percentArtsDEF, ConfusionDEF: infection.ConfusionDef + infection.AdditionalConfusionDef*int(plus),
+					DEF: percentDEF, DEX: infection.DEX + infection.AdditionalDEX*int(plus), HPRecoveryRate: infection.HPRecoveryRate + infection.AdditionalHPRecovery*int(plus), INT: infection.INT + infection.AdditionalINT*int(plus),
+					MaxHP: infection.MaxHP + infection.AdditionalHP*int(plus), ParalysisDEF: infection.ParalysisDef + infection.AdditionalParalysisDef*int(plus), PoisonDEF: infection.ParalysisDef + infection.AdditionalPoisonDef*int(plus), STR: infection.STR + infection.AdditionalSTR*int(plus),
+					Accuracy: infection.Accuracy + infection.AdditionalAccuracy*int(plus), Dodge: infection.DodgeRate + infection.AdditionalDodgeRate*int(plus), CanExpire: expire}
+			}
+			err := buff.Create()
+			if err != nil {
+				fmt.Println("Buff error: ", err)
+			}
 		}
 
 		if buff.ID == 241 || buff.ID == 244 { // invisibility
@@ -4544,19 +5484,52 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 		target := GetFromRegister(user.ConnectedServer, c.Map, uint16(targetID))
 		if ai, ok := target.(*AI); ok { // attacked to ai
 
+			pos := NPCPos[ai.PosID]
+			npc := NPCs[pos.NPCID]
+
+			for _, factionNPC := range ZhuangFactionMobs {
+				if factionNPC == npc.ID && c.Faction == 1 {
+					goto OUT
+				}
+			}
+			for _, factionNPC := range ShaoFactionMobs {
+				if factionNPC == npc.ID && c.Faction == 2 {
+					goto OUT
+				}
+			}
+
 			if skillID == 41201 || skillID == 41301 { // howl of tame
 				c.TamingAI = ai
 				goto OUT
 			}
 
-			pos := NPCPos[ai.PosID]
 			if pos.Attackable { // target is attackable
 				castLocation := ConvertPointToLocation(c.Coordinate)
 				if skillInfo.AreaCenter == 1 || skillInfo.AreaCenter == 2 {
 					castLocation = ConvertPointToLocation(ai.Coordinate)
 				}
-
-				castRange := skillInfo.BaseRadius + skillInfo.AdditionalRadius*float64(plus+1)
+				skillSlots, err := c.Socket.Skills.GetSkills()
+				if err != nil {
+					return nil, err
+				}
+				plusRange := 0.0
+				divinePlus := 0
+				plusDamage := 0
+				for _, slot := range skillSlots.Slots {
+					if slot.BookID == skillInfo.BookID {
+						for _, points := range slot.DivinePoints {
+							if points.DivineID == 2 && points.DivinePlus > 0 {
+								divinePlus = points.DivinePlus
+								plusRange = 0.2
+							}
+							if points.DivineID == 1 && points.DivinePlus > 0 {
+								divinePlus = points.DivinePlus
+								plusDamage = 100
+							}
+						}
+					}
+				}
+				castRange := skillInfo.BaseRadius + skillInfo.AdditionalRadius*float64(plus+0) + (float64(plusRange) * float64(divinePlus))
 				candidates := AIsByMap[ai.Server][ai.Map]
 
 				candidates = funk.Filter(candidates, func(cand *AI) bool {
@@ -4571,7 +5544,11 @@ func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ f
 
 				for _, mob := range candidates {
 					dmg, _ := c.CalculateDamage(mob, true)
-					c.Targets = append(c.Targets, &Target{Damage: dmg, AI: mob})
+					dmg += plusDamage * divinePlus
+					if skillInfo.InfectionID != 0 && skillInfo.Target == 1 {
+						c.Targets = append(c.Targets, &Target{Damage: dmg, AI: mob, SkillId: skillID})
+					}
+					c.Targets = append(c.Targets, &Target{Damage: dmg, AI: mob, SkillId: skillID})
 				}
 
 			} else { // target is not attackable
@@ -4610,6 +5587,112 @@ OUT:
 
 	//go stat.Update()
 	return resp, nil
+
+}
+
+func (c *Character) ApplyBuffEffectToAi(ai *AI, buffid int, dps int, duration int64) {
+
+	s := c.Socket
+	buff, err := FindBuffByAIID(buffid, int(ai.PseudoID))
+	if buff == nil && err == nil {
+		now := time.Now()
+		secs := now.Unix()
+		infection := BuffInfections[buffid]
+		ai, _ := GetFromRegister(s.User.ConnectedServer, s.Character.Map, uint16(s.Character.Selection)).(*AI)
+		buff := &AiBuff{ID: buffid, AiID: int(ai.PseudoID), Name: infection.Name, HPRecoveryRate: dps, StartedAt: secs, CharacterID: s.Character.ID, Duration: duration}
+		err = buff.Create()
+		if err != nil {
+			fmt.Println(fmt.Sprintf("Error: %s", err.Error()))
+			return
+		}
+
+		index := 5
+		r := DEAL_BUFF_AI
+		r.Insert(utils.IntToBytes(uint64(ai.PseudoID), 2, true), index) // ai pseudo id
+		index += 2
+		r.Insert(utils.IntToBytes(uint64(ai.PseudoID), 2, true), index) // ai pseudo id
+		index += 2
+		r.Insert(utils.IntToBytes(uint64(ai.HP), 4, true), index) // ai current hp
+		index += 4
+		r.Insert(utils.IntToBytes(uint64(ai.CHI), 4, true), index) // ai current chi
+		r.Insert(utils.IntToBytes(uint64(buffid), 4, true), 22)    //BUFF ID
+		c.Socket.Write(r)
+	}
+}
+
+func (c *Character) DealInfection(ai *AI, character *Character, skillID int) {
+	skillInfo := SkillInfos[skillID]
+	if skillInfo.InfectionID == 0 {
+		return
+	}
+	infection := BuffInfections[skillInfo.InfectionID]
+
+	skills := c.Socket.Skills
+	plus, err := skills.GetPlus(skillID)
+	if err != nil {
+		return
+	}
+
+	duration := (skillInfo.BaseTime + skillInfo.AdditionalTime*int(plus)) / 10
+
+	if ai != nil { //AI BUFF
+		c.ApplyBuffEffectToAi(ai, int(infection.ID), 10, int64(duration))
+	} else if character != nil { //PLAYER BUFF ADD
+
+		if infection.ID == 66 {
+			statEnemy := character.Socket.Stats
+			r := MOB_DEAL_DAMAGE
+			r.Insert(utils.IntToBytes(uint64(character.PseudoID), 2, true), 5) // character pseudo id
+			r.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 7)         // mob pseudo id
+			r.Insert(utils.IntToBytes(uint64(statEnemy.HP), 4, true), 9)       // character hp
+			r.Insert(utils.IntToBytes(uint64(statEnemy.CHI), 4, true), 13)     // character chi
+
+			r.Concat(character.GetHPandChi())
+			p := &nats.CastPacket{CastNear: true, CharacterID: character.ID, Data: r, Type: nats.PLAYER_ATTACK}
+			if err := p.Cast(); err != nil {
+				log.Println("deal damage broadcast error:", err)
+				return
+			}
+			return
+
+		}
+
+		buff, err := FindBuffByID(infection.ID, character.ID)
+		if err != nil {
+			return
+		} else if buff != nil {
+			buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
+				ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
+				ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef,
+				DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX, HPRecoveryRate: infection.HPRecoveryRate, INT: infection.INT,
+				MaxHP: infection.MaxHP, ParalysisDEF: infection.ParalysisDef, PoisonDEF: infection.ParalysisDef, STR: infection.STR, Accuracy: infection.Accuracy * int(plus), Dodge: infection.DodgeRate * int(plus), CanExpire: true}
+			buff.Update()
+
+		} else if buff == nil {
+
+			buff = &Buff{ID: infection.ID, CharacterID: character.ID, StartedAt: character.Epoch, Duration: int64(duration), Name: skillInfo.Name,
+				ATK: infection.BaseATK + infection.AdditionalATK*int(plus), ArtsATK: infection.BaseArtsATK + infection.AdditionalArtsATK*int(plus),
+				ArtsDEF: infection.ArtsDEF + infection.AdditionalArtsDEF*int(plus), ConfusionDEF: infection.ConfusionDef,
+				DEF: infection.BaseDef + infection.AdditionalDEF*int(plus), DEX: infection.DEX, HPRecoveryRate: infection.HPRecoveryRate, INT: infection.INT,
+				MaxHP: infection.MaxHP, ParalysisDEF: infection.ParalysisDef, PoisonDEF: infection.ParalysisDef, STR: infection.STR, Accuracy: infection.Accuracy * int(plus), Dodge: infection.DodgeRate * int(plus), CanExpire: true}
+			buff.Create()
+		}
+		if buff.ID == 70 || buff.ID == 73 || buff.ID == 58 { // invisibility
+			time.AfterFunc(time.Second*1, func() {
+				if character != nil {
+					character.Invisible = true
+				}
+			})
+		} else if buff.ID == 242 || buff.ID == 245 { // detection arts
+			character.DetectionMode = true
+		}
+
+		statData, _ := character.GetStats()
+		character.Socket.Write(statData)
+
+		p := &nats.CastPacket{CastNear: true, CharacterID: character.ID, Data: character.GetHPandChi()}
+		p.Cast()
+	}
 }
 
 func (c *Character) CalculateDamage(ai *AI, isSkill bool) (int, error) {
@@ -4663,8 +5746,7 @@ func (c *Character) CalculateDamageToPlayer(enemy *Character, isSkill bool) (int
 	}
 
 	reqAcc := float64(enemySt.Dodge) - float64(st.Accuracy) + float64(c.Level-int(enemy.Level))*10
-	//probability := float64(st.Accuracy) * 1000 / reqAcc
-	if utils.RandInt(0, 1000) < int64(reqAcc) {
+	if utils.RandInt(0, 2000) < int64(reqAcc) {
 		dmg = 0
 	}
 
@@ -4725,6 +5807,7 @@ func (c *Character) OpenSale(name string, slotIDs []int16, prices []uint64) ([]b
 	}
 
 	return resp, nil
+
 }
 
 func FindSaleVisitors(saleID uint16) []*Character {
@@ -4806,6 +5889,7 @@ func (c *Character) BuySaleItem(saleID uint16, saleSlotID, inventorySlotID int16
 	InventoryItems.Add(myItem.ID, myItem)
 
 	resp.Concat(item.GetData(inventorySlotID))
+	c.Socket.Write(resp)
 	logger.Log(logging.ACTION_BUY_SALE_ITEM, c.ID, fmt.Sprintf("Bought sale item (%d) with %d gold from seller (%d)", myItem.ID, saleItem.Price, seller.ID), c.UserID)
 	saleItem.IsSold = true
 
@@ -4820,7 +5904,7 @@ func (c *Character) BuySaleItem(saleID uint16, saleSlotID, inventorySlotID int16
 	remainingCount := len(funk.Filter(sale.Items, func(i *SaleItem) bool {
 		return i.IsSold == false
 	}).([]*SaleItem))
-
+	seller.Socket.Write(sellerResp)
 	if remainingCount > 0 {
 		sale.Data, _ = sale.SaleData()
 		resp.Concat(sale.Data)
@@ -4845,7 +5929,6 @@ func (c *Character) BuySaleItem(saleID uint16, saleSlotID, inventorySlotID int16
 		sellerResp.Concat(CLOSE_SALE)
 	}*/
 
-	seller.Socket.Write(sellerResp)
 	return resp, nil
 }
 
@@ -4976,11 +6059,16 @@ func (c *Character) JobPassives(stat *Stat) error {
 			stat.ArtsDEF += info.ArtsDef * plus
 			stat.Accuracy += info.Accuracy * plus
 			stat.Dodge += info.Dodge * plus
+			stat.ConfusionDEF += info.ConfusionDEF * plus
+			stat.PoisonDEF += info.PoisonDEF * plus
+			stat.ParalysisDEF += info.ParalysisDEF * plus
+			stat.HPRecoveryRate += info.HPRecoveryRate * plus
 		}
 	}
 
 	slots := funk.Filter(skillSlots.Slots, func(slot *SkillSet) bool { // get 2nd job passive book
-		return slot.BookID == 16100200 || slot.BookID == 16100300
+		return slot.BookID == 16100200 || slot.BookID == 16100300 || slot.BookID == 100030021 || slot.BookID == 100030023 || slot.BookID == 100030025 ||
+			slot.BookID == 30000040 || slot.BookID == 30000041 || slot.BookID == 30000042 || slot.BookID == 30000043 || slot.BookID == 30000044 || slot.BookID == 30000045
 	}).([]*SkillSet)
 
 	for _, slot := range slots {
@@ -5010,6 +6098,32 @@ func (c *Character) JobPassives(stat *Stat) error {
 			case 8: // passive atk
 				stat.MinATK += amount
 				stat.MaxATK += amount
+			case 9: //HP AND CHI
+				stat.MaxHP += amount
+				stat.MaxCHI += amount
+			case 11: //Dodge RAte AND ACCURACY
+				stat.Accuracy += amount
+				stat.Dodge += amount
+			case 12: //EXTERNAL ATK AND INTERNAL ATK
+				stat.MinArtsATK += amount
+				stat.MaxArtsATK += amount
+				stat.MinATK += amount
+				stat.MaxATK += amount
+			case 13: //INTERNAL ATTACK AND INTERNAL DEF
+				stat.MinATK += amount
+				stat.MaxATK += amount
+				stat.DEF += amount
+			case 14: //EXTERNAL ATK MINUS AND HP +
+				stat.MaxHP += amount
+				stat.MinArtsATK -= amount
+				stat.MaxArtsATK -= amount
+			case 15: //DAMAGE + HP
+				stat.MaxHP += amount
+				stat.MinATK += amount
+				stat.MaxATK += amount
+			case 16: //MINUS HP AND PLUS DEFENSE
+				stat.MaxHP -= 15 //
+				stat.DEF += amount
 			}
 		}
 	}
@@ -5027,7 +6141,7 @@ func (c *Character) BuffEffects(stat *Stat) error {
 	//stat := c.Socket.Stats
 
 	for _, buff := range buffs {
-		if buff.StartedAt+buff.Duration > c.Epoch {
+		if buff.StartedAt+buff.Duration > c.Epoch || !buff.CanExpire {
 			stat.MinATK += buff.ATK
 			stat.MaxATK += buff.ATK
 			stat.ATKRate += buff.ATKRate
@@ -5076,6 +6190,13 @@ func (c *Character) RelicDrop(itemID int64) []byte {
 	msg := fmt.Sprintf("%s has acquired [%s].", c.Name, itemName)
 	length := int16(len(msg) + 3)
 
+	now := time.Now().UTC()
+	relic := &RelicLog{CharID: c.ID, ItemID: itemID, DropTime: null.TimeFrom(now)}
+	RelicsLog[len(RelicsLog)] = relic
+	err := relic.Create()
+	if err != nil {
+		fmt.Println("Error with load: ", err)
+	}
 	resp := RELIC_DROP
 	resp.SetLength(length)
 	resp[6] = byte(len(msg))
@@ -5088,17 +6209,17 @@ func (c *Character) AidStatus() []byte {
 
 	resp := utils.Packet{}
 	if c.AidMode {
-		resp = utils.Packet{0xAA, 0x55, 0x02, 0x00, 0xFA, 0x01, 0x55, 0xAA}
-
+		resp = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0xFA, 0x01, 0x55, 0xAA}
+		resp.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 5) // pseudo id
 		r2 := utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x43, 0x01, 0x55, 0xAA}
 		r2.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 5) // pseudo id
 
 		resp.Concat(r2)
 
 	} else {
-		resp = utils.Packet{0xAA, 0x55, 0x02, 0x00, 0xFA, 0x00, 0x55, 0xAA}
-
-		r2 := utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x43, 0x01, 0x55, 0xAA}
+		resp = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0xFA, 0x00, 0x55, 0xAA}
+		resp.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 5) // pseudo id
+		r2 := utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x43, 0x00, 0x55, 0xAA}
 		r2.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 5) // pseudo id
 
 		resp.Concat(r2)
@@ -5122,7 +6243,6 @@ func (c *Character) PickaxeActivated() bool {
 }
 
 func (c *Character) TogglePet() []byte {
-
 	slots, err := c.InventorySlots()
 	if err != nil {
 		return nil
@@ -5133,35 +6253,44 @@ func (c *Character) TogglePet() []byte {
 	if pet == nil {
 		return nil
 	}
+	petInfo, _ := Pets[petSlot.ItemID]
+	if petInfo.Combat {
+		location := ConvertPointToLocation(c.Coordinate)
+		pet.Coordinate = utils.Location{X: location.X, Y: location.Y}
+		pet.IsOnline = !pet.IsOnline
 
-	location := ConvertPointToLocation(c.Coordinate)
-	pet.Coordinate = utils.Location{X: location.X + 3, Y: location.Y}
-	pet.IsOnline = !pet.IsOnline
+		spawnData, _ := c.SpawnCharacter()
+		if pet.IsOnline {
+			GeneratePetID(c, pet)
+			pet.PetCombatMode = 0
+			c.PetHandlerCB = c.PetHandler
+			go c.PetHandlerCB()
 
-	spawnData, _ := c.SpawnCharacter()
-	petInfo, ok := Pets[petSlot.ItemID]
-	if ok && !petInfo.Combat {
-		p := nats.CastPacket{CastNear: true, CharacterID: c.ID, Data: spawnData}
-		p.Cast()
-	}
+			resp := utils.Packet{
+				0xAA, 0x55, 0x0B, 0x00, 0x75, 0x00, 0x01, 0x00, 0x80, 0xA1, 0x43, 0x00, 0x00, 0x3D, 0x43, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x01, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x06, 0x00, 0x51, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x06, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x07, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+			}
 
-	if pet.IsOnline {
-		GeneratePetID(c, pet)
-
-		c.PetHandlerCB = c.PetHandler
-		go c.PetHandlerCB()
-
-		resp := utils.Packet{
-			0xAA, 0x55, 0x0B, 0x00, 0x75, 0x00, 0x01, 0x00, 0x80, 0xA1, 0x43, 0x00, 0x00, 0x3D, 0x43, 0x55, 0xAA,
-			0xAA, 0x55, 0x05, 0x00, 0x51, 0x01, 0x0A, 0x00, 0x00, 0x55, 0xAA,
-			0xAA, 0x55, 0x06, 0x00, 0x51, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x55, 0xAA,
-			0xAA, 0x55, 0x05, 0x00, 0x51, 0x06, 0x0A, 0x00, 0x00, 0x55, 0xAA,
-			0xAA, 0x55, 0x05, 0x00, 0x51, 0x07, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+			resp.Concat(spawnData)
+			return resp
 		}
-
-		resp.Concat(spawnData)
-
-		return resp
+	} else {
+		location := ConvertPointToLocation(c.Coordinate)
+		pet.Coordinate = utils.Location{X: location.X, Y: location.Y}
+		pet.IsOnline = !pet.IsOnline
+		spawnData, _ := c.SpawnCharacter()
+		if pet.IsOnline {
+			resp := utils.Packet{
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x01, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x06, 0x00, 0x51, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x07, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+			}
+			resp.Concat(spawnData)
+			return resp
+		}
 	}
 
 	pet.Target = 0
@@ -5172,6 +6301,90 @@ func (c *Character) TogglePet() []byte {
 	return DISMISS_PET
 }
 
+func (c *Character) ToggleMountPet() []byte {
+	slots, err := c.InventorySlots()
+	if err != nil {
+		return nil
+	}
+
+	petSlot := slots[0x0A]
+	pet := petSlot.Pet
+	if pet == nil {
+		return nil
+	}
+	petInfo, _ := Pets[petSlot.ItemID]
+	if petInfo.Combat {
+		location := ConvertPointToLocation(c.Coordinate)
+		pet.Coordinate = utils.Location{X: location.X, Y: location.Y}
+		pet.IsOnline = !pet.IsOnline
+
+		spawnData, _ := c.SpawnCharacter()
+		if pet.IsOnline {
+			GeneratePetID(c, pet)
+			pet.PetCombatMode = 0
+			c.PetHandlerCB = c.PetHandler
+			go c.PetHandlerCB()
+
+			resp := utils.Packet{
+				0xAA, 0x55, 0x0B, 0x00, 0x75, 0x00, 0x01, 0x00, 0x80, 0xA1, 0x43, 0x00, 0x00, 0x3D, 0x43, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x01, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x06, 0x00, 0x51, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x06, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x07, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+			}
+
+			resp.Concat(spawnData)
+			return resp
+		}
+	} else {
+		location := ConvertPointToLocation(c.Coordinate)
+		pet.Coordinate = utils.Location{X: location.X, Y: location.Y}
+		pet.IsOnline = !pet.IsOnline
+		spawnData, _ := c.SpawnCharacter()
+		if pet.IsOnline {
+			resp := utils.Packet{
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x01, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x06, 0x00, 0x51, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x55, 0xAA,
+				0xAA, 0x55, 0x05, 0x00, 0x51, 0x07, 0x0A, 0x00, 0x00, 0x55, 0xAA,
+			}
+			resp.Concat(spawnData)
+			return resp
+		}
+	}
+
+	pet.Target = 0
+	pet.Casting = false
+	pet.IsMoving = false
+	c.PetHandlerCB = nil
+	RemovePetFromRegister(c)
+	return DISMISS_PET
+}
+func RemoveIndex(s []*AI, index int) []*AI {
+	return append(s[:index], s[index+1:]...)
+}
+func (c *Character) DealDamageToPlayer(char *Character, dmg int) {
+	if c == nil {
+		log.Println("character is nil")
+		return
+	} else if char.Socket.Stats.HP <= 0 {
+		return
+	}
+	if dmg > char.Socket.Stats.HP {
+		dmg = char.Socket.Stats.HP
+	}
+
+	char.Socket.Stats.HP -= dmg
+	if char.Socket.Stats.HP <= 0 {
+		char.Socket.Stats.HP = 0
+	}
+	r := DEAL_DAMAGE
+	r.Insert(utils.IntToBytes(uint64(char.PseudoID), 2, true), 5)          // ai pseudo id
+	r.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 7)             // ai pseudo id
+	r.Insert(utils.IntToBytes(uint64(char.Socket.Stats.HP), 4, true), 9)   // ai current hp
+	r.Insert(utils.IntToBytes(uint64(char.Socket.Stats.CHI), 4, true), 13) // ai current chi
+	char.Socket.Write(r)
+	c.Socket.Write(r)
+}
 func (c *Character) DealDamage(ai *AI, dmg int) {
 
 	if c == nil {
@@ -5179,6 +6392,28 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 		return
 	} else if ai.HP <= 0 {
 		return
+	}
+	npcPos := NPCPos[ai.PosID]
+	if npcPos == nil {
+		log.Println("npc pos is nil")
+		return
+	}
+
+	npc := NPCs[npcPos.NPCID]
+	if npc == nil {
+		log.Println("npc is nil")
+		return
+	}
+
+	for _, factionNPC := range ZhuangFactionMobs {
+		if factionNPC == npc.ID && c.Faction == 1 {
+			return
+		}
+	}
+	for _, factionNPC := range ShaoFactionMobs {
+		if factionNPC == npc.ID && c.Faction == 2 {
+			return
+		}
 	}
 
 	s := c.Socket
@@ -5233,36 +6468,64 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 	r.Insert(utils.IntToBytes(uint64(c.PseudoID), 2, true), 7)  // ai pseudo id
 	r.Insert(utils.IntToBytes(uint64(ai.HP), 4, true), 9)       // ai current hp
 	r.Insert(utils.IntToBytes(uint64(0), 4, true), 13)          // ai current chi
-
 	p := &nats.CastPacket{CastNear: true, MobID: ai.ID, Data: r, Type: nats.MOB_ATTACK}
 	if err := p.Cast(); err != nil {
 		log.Println("deal damage broadcast error:", err)
 		return
 	}
 
-	//s.Conn.Write(r)
-
-	npcPos := NPCPos[ai.PosID]
-	if npcPos == nil {
-		log.Println("npc pos is nil")
-		return
-	}
-
-	npc := NPCs[npcPos.NPCID]
-	if npc == nil {
-		log.Println("npc is nil")
-		return
-	}
-
 	if !npcPos.Attackable {
 		go ai.DropHandler(c)
 	}
+	if c.Map == 255 && IsFactionWarStarted() { //faction war
+		if c.Faction == 1 {
+			if npcPos.NPCID == 425506 {
+				AddPointsToFactionWarFaction(5, 1)
+			}
+			if npcPos.NPCID == 425505 {
+				AddPointsToFactionWarFaction(50, 1)
+			}
+			if npcPos.NPCID == 425507 {
+				AddPointsToFactionWarFaction(7, 1)
+			}
+			if npcPos.NPCID == 425508 {
+				AddPointsToFactionWarFaction(500, 1)
+			}
+		}
+		if c.Faction == 2 {
+			if npcPos.NPCID == 425501 {
+				AddPointsToFactionWarFaction(5, 2)
+			}
+			if npcPos.NPCID == 425502 {
+				AddPointsToFactionWarFaction(50, 2)
+			}
+			if npcPos.NPCID == 425503 {
+				AddPointsToFactionWarFaction(7, 2)
+			}
+			if npcPos.NPCID == 425504 {
+				AddPointsToFactionWarFaction(500, 2)
+			}
+		}
+	}
 
 	if ai.HP <= 0 { // ai died
-
+		DeleteBuffsByAiPseudoID(ai.PseudoID)
 		if ai.Once {
 			ai.Handler = nil
-
+			if funk.Contains(DungeonZones, ai.Map) {
+				//	for i, action := range DungeonsByMap[ai.Server][ai.Map] {
+				//if action.ID == ai.ID {
+				//s2 := RemoveIndex(DungeonsByMap[ai.Server][ai.Map], i)
+				//DungeonsByMap[ai.Server][ai.Map] = s2
+				fmt.Println("Mobs: ", DungeonsByMap[c.Socket.User.ConnectedServer][c.Map])
+				DungeonsByMap[c.Socket.User.ConnectedServer][c.Map]--
+				/*mobsCount := DungeonsByMap[c.Socket.User.ConnectedServer][c.Map]
+				if DungeonsByMap[c.Socket.User.ConnectedServer][c.Map] <= 10 {
+					s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("%d mobs remaining", mobsCount)))
+				}*/
+				//}
+				//}
+			}
 		} else {
 			time.AfterFunc(time.Duration(npcPos.RespawnTime)*time.Second/2, func() { // respawn mob n secs later
 				curCoordinate := ConvertPointToLocation(ai.Coordinate)
@@ -5283,7 +6546,11 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 				ai.IsDead = false
 			})
 		}
-
+		if npc.ID == 424201 && WarStarted {
+			OrderPoints -= 200
+		} else if npc.ID == 424202 && WarStarted {
+			ShaoPoints -= 200
+		}
 		exp := int64(0)
 		if c.Level <= 100 {
 			exp = npc.Exp
@@ -5350,8 +6617,67 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 				m.Socket.Write(r)
 			}
 		}
+		//GIVE 200+ ataraxia ITEM
+		if npc.ID == 43401 {
+			if c.Exp >= 544951059310 && c.Level == 200 {
+				resp := utils.Packet{}
+				slots, err := c.InventorySlots()
+				if err != nil {
+				}
+				reward := NewSlot()
+				reward.ItemID = int64(90000304)
+				reward.Quantity = 1
+				_, slot, _ := c.AddItem(reward, -1, true)
+				resp.Concat(slots[slot].GetData(slot))
+				s.Conn.Write(resp)
+				s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("You kill the Wyrm, now you can make the transformation.")))
+			}
+		}
+		//60006	Underground(EXP)
+		//60011	Waterfall(EXP)
+		//60016	Forest(EXP)
+		//60021	Sky Garden(EXP)
+		//FIVE ELEMENT CASTLE
+		claimer, err := ai.FindClaimer()
+		if err == nil || claimer != nil {
+			//exptime := time.Now().UTC().Add(time.Hour * 2)
+			if npc.ID == 423308 { //HWARANG GUARDIAN STATUE //SOUTHERN WOOD TEMPLE
+				if claimer.GuildID > 0 {
+					/*					FiveClans[1].ClanID = claimer.GuildID
+										FiveClans[1].ExpiresAt = null.TimeFrom(exptime)
+										FiveClans[1].Update()*/
+					CaptureFive(1, c)
+				}
+			} else if npc.ID == 423310 { //SUGUN GUARDIAN STATUE //LIGHTNING HILL TEMPLE
+				if c.GuildID > 0 {
+					/*FiveClans[2].ClanID = claimer.GuildID
+					FiveClans[2].ExpiresAt = null.TimeFrom(exptime)
+					FiveClans[2].Update()*/
+					CaptureFive(2, c)
+				}
+			} else if npc.ID == 423312 { //CHUNKYUNG GUARDIAN STATUE //OCEAN ARMY TEMPLE
+				if claimer.GuildID > 0 {
+					/*FiveClans[3].ClanID = claimer.GuildID
+					FiveClans[3].ExpiresAt = null.TimeFrom(exptime)
+					FiveClans[3].Update()*/
+					CaptureFive(3, c)
+				}
+			} else if npc.ID == 423314 { //MOKNAM GUARDIAN STATUE //FLAME WOLF TEMPLE
+				if c.GuildID > 0 {
+					/*FiveClans[4].ClanID = claimer.GuildID
+					FiveClans[4].ExpiresAt = null.TimeFrom(exptime)
+					FiveClans[4].Update()*/
+					CaptureFive(4, c)
+				}
+			} else if npc.ID == 423316 { //JISU GUARDIAN STATUE //WESTERN LAND TEMPLE
+				/*FiveClans[5].ClanID = claimer.GuildID
+				FiveClans[5].ExpiresAt = null.TimeFrom(exptime)
+				FiveClans[5].Update()*/
+				CaptureFive(5, c)
+			}
+		}
 
-		// PTS gained
+		// PTS gained LOOT
 		c.PTS++
 		if c.PTS%50 == 0 {
 			r = c.GetPTS()
@@ -5374,7 +6700,10 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 				return
 			}
 
-			ai.DropHandler(claimer)
+			dropMaxLevel := int(npc.Level + 250)
+			if c.Level <= dropMaxLevel {
+				ai.DropHandler(claimer)
+			}
 			time.AfterFunc(time.Second, func() {
 				ai.DamageDealers.Clear()
 			})
@@ -5393,6 +6722,7 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 		ai.IsMoving = false
 		ai.MovementToken = 0
 	}
+
 }
 
 func (c *Character) GetPetStats() []byte {
@@ -5433,7 +6763,8 @@ func (c *Character) StartPvP(timeLeft int) {
 }
 
 func (c *Character) CanAttack(enemy *Character) bool {
-	return (c.DuelID == enemy.ID && c.DuelStarted) || funk.Contains(PvPZones, c.Map)
+	servers, _ := GetServers()
+	return (c.DuelID == enemy.ID && c.DuelStarted) || funk.Contains(PvPZones, c.Map) || servers[int16(c.Socket.User.ConnectedServer)-1].IsPVPServer
 }
 
 func (c *Character) OnDuelStarted() []byte {
@@ -5461,6 +6792,7 @@ func (c *Character) OnDuelStarted() []byte {
 	resp.Concat(statData)
 	resp.Concat([]byte{0xAA, 0x55, 0x02, 0x00, 0x2A, 0x04, 0x55, 0xAA})
 	return resp
+
 }
 
 func (c *Character) HasAidBuff() bool {
@@ -5470,6 +6802,6 @@ func (c *Character) HasAidBuff() bool {
 	}
 
 	return len(funk.Filter(slots, func(s *InventorySlot) bool {
-		return (s.ItemID == 13000170 || s.ItemID == 13000171) && s.Activated && s.InUse
+		return (s.ItemID == 13000170 || s.ItemID == 13000171 || s.ItemID == 13000173 || s.ItemID == 23000141) && s.Activated && s.InUse
 	}).([]*InventorySlot)) > 0
 }

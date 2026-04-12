@@ -3,12 +3,12 @@ package player
 import (
 	"log"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/gold"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/server"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/gold"
+	"hero-emulator/messaging"
+	"hero-emulator/nats"
+	"hero-emulator/server"
+	"hero-emulator/utils"
 
 	"github.com/thoas/go-funk"
 )

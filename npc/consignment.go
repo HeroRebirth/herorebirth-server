@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"math"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/utils"
 )
 
 type (
@@ -28,12 +28,12 @@ func (h *OpenConsignmentHandler) Handle(s *database.Socket, data []byte) ([]byte
 
 	index := 8 + itemNameLength
 
-	minUpgLevel := int(data[index])
-	maxUpgLevel := int(data[index+1])
-	minPrice := uint64(utils.BytesToInt(data[index+2:index+10], true))
-	maxPrice := uint64(utils.BytesToInt(data[index+10:index+18], true))
-	orderBy := int(data[index+18])
-	page := int(data[index+20]) + 1
+	minUpgLevel := int(data[index+3])
+	maxUpgLevel := int(data[index+4])
+	minPrice := uint64(utils.BytesToInt(data[index+6:index+14], true))
+	maxPrice := uint64(utils.BytesToInt(data[index+14:index+21], true))
+	orderBy := int(data[index+21])
+	page := int(data[index+22]) + 1
 
 	items, count, err := database.GetConsignmentItems(page, category, minUpgLevel, maxUpgLevel, orderBy, minPrice, maxPrice, itemSearch)
 	if err != nil {
@@ -133,7 +133,12 @@ func (h *OpenConsignmentHandler) Handle(s *database.Socket, data []byte) ([]byte
 
 		resp.Insert(sockets, c)
 		c += 15
-
+		if item.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(item.ItemType), 1, true), c-6)
+			if item.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(item.JudgementStat), 4, true), c-5)
+			}
+		}
 		resp.Insert([]byte{0x00, 0x00, 0x00}, c)
 		c += 3
 		counter++

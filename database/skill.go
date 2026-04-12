@@ -85,7 +85,7 @@ func getSkillInfos() error {
 	}
 
 	for i := uint64(0); i < uint64(len(SkillPoints)); i++ {
-		SkillPoints[i] = 2000 * i * i
+		SkillPoints[i] = 20000 * i * i
 	}
 
 	return nil

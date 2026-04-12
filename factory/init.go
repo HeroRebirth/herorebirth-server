@@ -5,11 +5,11 @@ import (
 	"log"
 	dbg "runtime/debug"
 
-	"github.com/syntaxgame/dragon-legend/auth"
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/npc"
-	"github.com/syntaxgame/dragon-legend/player"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/auth"
+	"hero-emulator/database"
+	"hero-emulator/npc"
+	"hero-emulator/player"
+	"hero-emulator/utils"
 )
 
 type Factory interface {
@@ -26,6 +26,7 @@ var (
 		259:   &auth.CharacterCreationHandler{},
 		261:   &auth.CharacterSelectionHandler{},
 		434:   &auth.CharacterDeletionHandler{},
+		522:   &player.QuestHandler{},
 		441:   &player.InTacticalSpaceTPHandler{},
 		2310:  &player.QuitGameHandler{},
 		2312:  &player.ServerMenuHandler{},
@@ -52,8 +53,9 @@ var (
 		18705: &player.DealDamageHandler{},
 		19715: &player.RemoveBuffHandler{},
 		20482: &player.TacticalSpaceTPHandler{},
-		20737: &player.TogglePetHandler{},
+		20737: &player.ToggleMountPetHandler{},
 		20738: &player.TogglePetHandler{},
+		20741: &player.PetCombatModeHandler{},
 		20993: &player.SendPartyRequestHandler{},
 		20994: &player.RespondPartyRequestHandler{},
 		20995: &player.LeavePartyHandler{},
@@ -73,6 +75,8 @@ var (
 		21520: &player.HolyWaterUpgradeHandler{},
 		21526: &npc.CreateSocketHandler{},
 		21527: &npc.UpgradeSocketHandler{},
+		21536: &npc.CoProductionHandler{},
+		21538: &npc.AppearanceHandler{},
 		21761: &player.OpenSaleHandler{},
 		21762: &player.CloseSaleHandler{},
 		21763: &player.VisitSaleHandler{},
@@ -97,6 +101,8 @@ var (
 		22817: &player.ActivateTimeLimitedItemHandler2{},
 		22832: &player.DestroyItemHandler{},
 		22848: &player.ReplaceHTItemHandler{},
+		22849: &player.DiscriminateItemHandler{},
+		25089: &player.InspectItemHandler{},
 		25090: &auth.StartGameHandler{},
 		25345: &player.DepositHandler{},
 		25346: &player.WithdrawHandler{},
@@ -113,10 +119,11 @@ var (
 		28943: &player.ChatHandler{},
 		28945: &player.ChatHandler{},
 		28946: &player.ChatHandler{},
-		30721: &player.ArrangeInventoryHandler{},
+		30721: &player.ArrangeFunctionHandler{},
 		32769: &player.ArrangeBankHandler{},
 		33026: &player.UpgradeSkillHandler{},
 		33027: &player.DowngradeSkillHandler{},
+		33029: &player.DivineUpgradeSkillHandler{},
 		33030: &player.RemoveSkillHandler{},
 		33282: &player.UpgradePassiveSkillHandler{},
 		33283: &player.DowngradePassiveSkillHandler{},
@@ -129,6 +136,7 @@ var (
 		33543: &player.ExpelFromGuildHandler{},
 		33547: &player.ChangeGuildLogoHandler{},
 		33585: &player.ChangeRoleHandler{},
+		47874: &player.TravelToFiveClanArea{},
 		41472: &player.OpenLotHandler{},
 		41473: &player.OpenLotHandler{},
 		42241: &player.TransferSoulHandler{},
@@ -136,6 +144,9 @@ var (
 		50176: &player.AddStatHandler{},
 		50177: &player.AddStatHandler{},
 		50178: &player.AddStatHandler{},
+		50179: &player.AddNatureHandler{},
+		50180: &player.AddNatureHandler{},
+		50181: &player.AddNatureHandler{},
 		52224: &player.SaveSlotbarHandler{},
 	}
 

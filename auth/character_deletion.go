@@ -3,9 +3,9 @@ package auth
 import (
 	"sort"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/logging"
+	"hero-emulator/utils"
 )
 
 type CharacterDeletionHandler struct {

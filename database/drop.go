@@ -3,7 +3,8 @@ package database
 import (
 	"math"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 )
 

@@ -1,24 +1,29 @@
+/*
+A big thanks to DRAGON-LEGEND the biggest inspiration for all off us!
+*/
+
 package main
 
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"sort"
 	"strconv"
 	"time"
 
+	"hero-emulator/ai"
+	"hero-emulator/api"
+	"hero-emulator/config"
+	"hero-emulator/database"
+	_ "hero-emulator/factory"
+	"hero-emulator/logging"
+	"hero-emulator/nats"
+	"hero-emulator/redis"
+
 	"github.com/robfig/cron"
-	"github.com/syntaxgame/dragon-legend/ai"
-	_ "github.com/syntaxgame/dragon-legend/ai"
-	"github.com/syntaxgame/dragon-legend/api"
-	"github.com/syntaxgame/dragon-legend/config"
-	"github.com/syntaxgame/dragon-legend/database"
-	_ "github.com/syntaxgame/dragon-legend/factory"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/redis"
 	"github.com/thoas/go-funk"
 )
 
@@ -61,28 +66,31 @@ func startServer() {
 	port := cfg.Server.Port
 
 	listen, err := net.Listen("tcp4", ":"+strconv.Itoa(port))
-	defer listen.Close()
+
+	// defer listen.Close() // Uncoment this one if anything goes wrong!
+
 	if err != nil {
+		defer listen.Close() // If anything goes wrong delete this line and uncoment the one on the top.
 		log.Fatalf("Socket listen port %d failed,%s", port, err)
 		os.Exit(1)
 	}
-	log.Printf("Begin listen port: %d", port)
-
+	log.Printf("Begin listen on port: %d", port)
+	StartLogging()
 	//connections = make(map[string]net.Conn)
 	//remoteAddrs = make(map[string]int)
-
+	// dungeon.ExploreTheWorld()
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
 			log.Fatalln(err)
 			continue
 		}
-
 		ws := database.Socket{Conn: conn}
 		//ws.SetPingDuration(time.Second * 2)
 		//ws.SetPingHandler(nil)
 		go ws.Read()
 	}
+
 }
 
 func cronHandler() {
@@ -91,20 +99,17 @@ func cronHandler() {
 		database.RefreshAIDs()
 	})
 	c.Start()
+	database.RefreshAIDs()
 }
 
 func main() {
-
 	initRedis()
 	initDatabase()
 	cronHandler()
-
 	ai.Init()
 	go database.UnbanUsers()
-
 	s := nats.RunServer(nil)
 	defer s.Shutdown()
-
 	c, err := nats.ConnectSelf(nil)
 	defer c.Close()
 
@@ -113,7 +118,6 @@ func main() {
 	}
 
 	go api.InitGRPC()
-
 	startServer()
 }
 
@@ -155,6 +159,22 @@ func resolveOverlappingItems() { //67-306
 			}
 		}
 	}
+}
+
+type IntRange struct {
+	min, max int
+}
+
+// get next random value within the interval including min and max
+func (ir *IntRange) NextRandom(r *rand.Rand) int {
+	return r.Intn(ir.max-ir.min+1) + ir.min
+}
+func StartLogging() {
+	fi, err := os.OpenFile("Log.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) //log file
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	log.SetOutput(fi)
 }
 
 func createServerMobs(server int) {

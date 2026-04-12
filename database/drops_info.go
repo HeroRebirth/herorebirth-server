@@ -93,3 +93,20 @@ func getAllDrops() error {
 
 	return nil
 }
+func RefreshAllDrops() error {
+	var drops []*DropInfo
+	query := `select * from data.drops`
+
+	if _, err := db.Select(&drops, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getAllDrops: %s", err.Error())
+	}
+
+	for _, d := range drops {
+		Drops[d.ID] = d
+	}
+
+	return nil
+}

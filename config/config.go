@@ -10,7 +10,7 @@ type Database struct {
 	IP              string
 	Port            int
 	User            string
-	Password        string `json:"-"`
+	Password        string `json13:"-"`
 	Name            string
 	ConnMaxIdle     int
 	ConnMaxOpen     int

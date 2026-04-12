@@ -6,9 +6,10 @@ import (
 	glog "log"
 	"time"
 
+	"hero-emulator/redis"
+	"hero-emulator/utils"
+
 	"github.com/google/uuid"
-	"github.com/syntaxgame/dragon-legend/redis"
-	"github.com/syntaxgame/dragon-legend/utils"
 	"github.com/tidwall/gjson"
 )
 
@@ -40,7 +41,7 @@ type (
 	Log struct {
 		Action      Action    `json:"action,omitempty"`
 		CharacterID string    `json:"character_id,omitempty"`
-		Date        time.Time `json:"date,omitempty"`
+		Date        time.Time `json:"date/omitempty"`
 		ID          string    `json:"id,omitempty"`
 		Message     string    `json:"message,omitempty"`
 		UserID      string    `json:"user_id,omitempty"`

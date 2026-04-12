@@ -1,12 +1,18 @@
 package player
 
 import (
+	"fmt"
+	"log"
 	"math"
 	"sort"
+	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/messaging"
+	"hero-emulator/nats"
+	"hero-emulator/server"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 )
 
@@ -23,6 +29,7 @@ type (
 	DestroyItemHandler              struct{}
 	CombineItemsHandler             struct{}
 	ArrangeInventoryHandler         struct{}
+	ArrangeFunctionHandler          struct{}
 	ArrangeBankHandler              struct{}
 	DepositHandler                  struct{}
 	WithdrawHandler                 struct{}
@@ -30,6 +37,8 @@ type (
 	CloseHTMenuHandler              struct{}
 	BuyHTItemHandler                struct{}
 	ReplaceHTItemHandler            struct{}
+	DiscriminateItemHandler         struct{}
+	InspectItemHandler              struct{}
 	DressUpHandler                  struct{}
 	SplitItemHandler                struct{}
 	HolyWaterUpgradeHandler         struct{}
@@ -38,7 +47,9 @@ type (
 	OpenBoxHandler2                 struct{}
 	ActivateTimeLimitedItemHandler  struct{}
 	ActivateTimeLimitedItemHandler2 struct{}
+	ToggleMountPetHandler           struct{}
 	TogglePetHandler                struct{}
+	PetCombatModeHandler            struct{}
 )
 
 var (
@@ -56,7 +67,7 @@ var (
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
 	REPLACE_HT_ITEM = utils.Packet{0xAA, 0x55, 0x0A, 0x00, 0x59, 0x40, 0x0A, 0x00, 0x55, 0xAA}
 	HT_VISIBILITY   = utils.Packet{0xAA, 0x55, 0x06, 0x00, 0x59, 0x11, 0x0A, 0x00, 0x01, 0x00, 0x55, 0xAA}
-
+	PET_COMBAT      = utils.Packet{0xAA, 0x55, 0x06, 0x00, 0x51, 0x05, 0x0a, 0x00, 0x00, 0x55, 0xAA}
 	htShopQuantites = map[int64]uint{17100004: 40, 17100005: 40, 15900001: 50}
 )
 
@@ -195,15 +206,34 @@ func (h *CombineItemsHandler) Handle(s *database.Socket, data []byte) ([]byte, e
 
 	return resp, nil
 }
-
-func (h *ArrangeInventoryHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
-
+func WaitFunctionTimer(s *database.Socket) {
+	time.AfterFunc(time.Second*3, func() {
+		s.Character.PacketSended = false
+		resp, _ := ArrangeInventory(s)
+		s.Character.Socket.Write(resp)
+	})
+}
+func (h *ArrangeFunctionHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+	if !s.Character.PacketSended {
+		WaitFunctionTimer(s)
+		s.Character.PacketSended = true
+		resp, err := ArrangeInventory(s)
+		return resp, err
+	} else {
+		EMPTY_Arrange := utils.Packet{0xaa, 0x55, 0x32, 0x00, 0x78, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x55, 0xaa}
+		resp := EMPTY_Arrange
+		resp.Concat(messaging.InfoMessage(fmt.Sprintf("You need to wait 3 seconds.")))
+		return resp, nil
+	}
+	return nil, nil
+}
+func ArrangeInventory(s *database.Socket) ([]byte, error) {
 	if s.Character.TradeID != "" || database.FindSale(s.Character.PseudoID) != nil {
 		return nil, nil
 	}
-
 	slots, err := s.Character.InventorySlots()
 	if err != nil {
+		fmt.Println("Error_:", err)
 		return nil, err
 	}
 
@@ -261,7 +291,13 @@ func (h *ArrangeInventoryHandler) Handle(s *database.Socket, data []byte) ([]byt
 		r.Insert(slot.GetUpgrades(), 16)                               // slot upgrades
 		r[31] = byte(slot.SocketCount)                                 // socket count
 		r.Insert(slot.GetSockets(), 32)                                // slot sockets
-
+		c := 32 + 15
+		if slot.ItemType != 0 {
+			r.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+			if slot.ItemType == 2 {
+				r.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+			}
+		}
 		if i == 55 {
 			r[50] = 1
 		}
@@ -336,7 +372,189 @@ func (h *ArrangeInventoryHandler) Handle(s *database.Socket, data []byte) ([]byt
 		r.Insert(slot.GetUpgrades(), 16)                               // slot upgrades
 		r[31] = byte(slot.SocketCount)                                 // socket count
 		r.Insert(slot.GetSockets(), 32)                                // slot sockets
+		c := 32 + 15
+		if slot.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+			if slot.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+			}
+		}
+		if i == 55 {
+			r[50] = 1
+		}
 
+		r[51] = 1
+		r.Insert(utils.IntToBytes(uint64(slot.RFU.(int64)), 2, true), 52) // pre slot id
+
+		if info != nil && info.GetType() == database.PET_TYPE {
+			r2.Concat(slot.GetData(int16(slot.SlotID)))
+		}
+
+		go slot.Update()
+		resp.Concat(r)
+		resp.Concat(r2)
+	}
+
+	for i := 0; i < 56; i++ {
+		slotID := i + 0x0155
+		newSlots[i].RFU = 0
+		*slots[slotID] = newSlots[i]
+	}
+	return resp, nil
+}
+func (h *ArrangeInventoryHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+
+	if s.Character.TradeID != "" || database.FindSale(s.Character.PseudoID) != nil {
+		return nil, nil
+	}
+
+	slots, err := s.Character.InventorySlots()
+	if err != nil {
+		return nil, err
+	}
+
+	newSlots := make([]database.InventorySlot, 56)
+	for i := 0; i < 56; i++ {
+		slotID := i + 0x0B
+		newSlots[i] = *slots[slotID]
+		if newSlots[i].ItemID == 0 {
+			newSlots[i].ItemID = math.MaxInt64
+		}
+		newSlots[i].RFU = int64(slotID)
+	}
+
+	sort.Slice(newSlots, func(i, j int) bool {
+		if newSlots[i].ItemID < newSlots[j].ItemID {
+			return true
+		}
+		return false
+	})
+
+	resp := utils.Packet{}
+	for i := 0; i < 56; i++ { // first page
+		slot := &newSlots[i]
+		r, r2 := ARRANGE_ITEM, utils.Packet{}
+
+		if slot.ItemID == math.MaxInt64 {
+			slot.ItemID = 0
+		}
+
+		slot.SlotID = int16(i + 0x0B)
+		r.Insert(utils.IntToBytes(uint64(slot.ItemID), 4, true), 6) // item id
+
+		info := database.Items[slot.ItemID]
+		if info != nil && slot.Activated { // using state
+			if info.TimerType == 1 {
+				r[10] = 3
+			} else if info.TimerType == 3 {
+				r[10] = 5
+				r2 = database.GREEN_ITEM_COUNT
+				r2.Insert(utils.IntToBytes(uint64(slot.SlotID), 2, true), 8)    // slot id
+				r2.Insert(utils.IntToBytes(uint64(slot.Quantity), 4, true), 10) // item quantity
+			}
+		} else {
+			r[10] = 0
+		}
+
+		if slot.ItemID == 0 {
+			r[11] = 0
+		} else if slot.Plus > 0 {
+			r[11] = 0xA2
+		}
+
+		r.Insert(utils.IntToBytes(uint64(slot.Quantity), 2, true), 12) // item quantity
+		r.Insert(utils.IntToBytes(uint64(slot.SlotID), 2, true), 14)   // slot id
+		r.Insert(slot.GetUpgrades(), 16)                               // slot upgrades
+		r[31] = byte(slot.SocketCount)                                 // socket count
+		r.Insert(slot.GetSockets(), 32)                                // slot sockets
+		c := 32 + 15
+		if slot.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+			if slot.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+			}
+		}
+		if i == 55 {
+			r[50] = 1
+		}
+
+		r.Insert(utils.IntToBytes(uint64(slot.RFU.(int64)), 2, true), 52) // pre slot id
+
+		if info != nil && info.GetType() == database.PET_TYPE {
+			r2.Concat(slot.GetData(int16(slot.SlotID)))
+		}
+
+		go slot.Update()
+		resp.Concat(r)
+		resp.Concat(r2)
+	}
+
+	for i := 0; i < 56; i++ {
+		slotID := i + 0x0B
+		newSlots[i].RFU = 0
+		*slots[slotID] = newSlots[i]
+	}
+
+	newSlots = make([]database.InventorySlot, 56)
+	for i := 0; i < 56; i++ {
+		slotID := i + 0x0155
+		newSlots[i] = *slots[slotID]
+		if newSlots[i].ItemID == 0 {
+			newSlots[i].ItemID = math.MaxInt64
+		}
+		newSlots[i].RFU = int64(slotID)
+	}
+
+	sort.Slice(newSlots, func(i, j int) bool {
+		if newSlots[i].ItemID < newSlots[j].ItemID {
+			return true
+		}
+		return false
+	})
+
+	for i := 0; i < 56; i++ { // second page
+		slot := &newSlots[i]
+		r, r2 := ARRANGE_ITEM, utils.Packet{}
+
+		if slot.ItemID == math.MaxInt64 {
+			slot.ItemID = 0
+		}
+
+		slot.SlotID = int16(i + 0x0155)
+		r.Insert(utils.IntToBytes(uint64(slot.ItemID), 4, true), 6) // item id
+
+		info := database.Items[slot.ItemID]
+		if info != nil && slot.Activated { // using state
+			if info.TimerType == 1 {
+				r[10] = 3
+			} else if info.TimerType == 3 {
+				r[10] = 5
+				r2 = database.GREEN_ITEM_COUNT
+				r2.Insert(utils.IntToBytes(uint64(slot.SlotID), 2, true), 8)    // slot id
+				r2.Insert(utils.IntToBytes(uint64(slot.Quantity), 4, true), 10) // item quantity
+			}
+		} else {
+			r[10] = 0
+		}
+
+		if slot.ItemID == 0 {
+			r[11] = 0
+		} else if slot.Plus > 0 {
+			r[11] = 0xA2
+		}
+
+		r.Insert(utils.IntToBytes(uint64(slot.Quantity), 2, true), 12) // item quantity
+		r.Insert(utils.IntToBytes(uint64(slot.SlotID), 2, true), 14)   // slot id
+		r.Insert(slot.GetUpgrades(), 16)                               // slot upgrades
+		r[31] = byte(slot.SocketCount)                                 // socket count
+		r.Insert(slot.GetSockets(), 32)                                // slot sockets
+		c := 32 + 15
+		if slot.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+			if slot.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+			}
+		}
 		if i == 55 {
 			r[50] = 1
 		}
@@ -437,6 +655,13 @@ func (h *ArrangeBankHandler) Handle(s *database.Socket, data []byte) ([]byte, er
 				r.Insert(slot.GetUpgrades(), 16) // slot upgrades
 				r[31] = byte(slot.SocketCount)   // socket count
 				r.Insert(slot.GetSockets(), 32)  // slot sockets
+				c := 32 + 15
+				if slot.ItemType != 0 {
+					resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+					if slot.ItemType == 2 {
+						resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+					}
+				}
 				r.SetLength(0x4D)
 			}
 
@@ -555,7 +780,7 @@ func (h *BuyHTItemHandler) Handle(s *database.Socket, data []byte) ([]byte, erro
 			petInfo := database.Pets[int64(itemID)]
 			petExpInfo := database.PetExps[int16(petInfo.Level)]
 
-			targetExps := []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt}
+			targetExps := []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt, petExpInfo.ReqExpDivEvo1, petExpInfo.ReqExpDivEvo2, petExpInfo.ReqExpDivEvo3}
 			item.Pet = &database.PetSlot{
 				Fullness: 100, Loyalty: 100, PseudoID: 0,
 				Exp:   uint64(targetExps[petInfo.Evolution-1]),
@@ -585,6 +810,44 @@ func (h *BuyHTItemHandler) Handle(s *database.Socket, data []byte) ([]byte, erro
 		return resp, nil
 	}
 
+	return nil, nil
+}
+
+func (h *DiscriminateItemHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+
+	slots, err := s.Character.InventorySlots()
+	if err != nil {
+		resp := messaging.SystemMessage(messaging.INSUFFICIENT_GOLD)
+		return resp, nil
+	}
+
+	slotID := int(utils.BytesToInt(data[6:8], true)) //max: 754700
+	item := slots[slotID]
+	itemstat := database.Items[item.ItemID]
+	discprice := itemstat.MinLevel * 5000
+	if s.Character.Gold < uint64(discprice) {
+		return nil, nil
+	}
+	index := 0
+	seed := int64(utils.RandInt(0, 754700))
+	for _, prob := range database.ItemJudgements {
+		if float64(prob.Probabilities) >= float64(seed) {
+			index = prob.ID
+			break
+		}
+	}
+	if index != 0 {
+		s.Character.LootGold(-uint64(discprice))
+		slot := slots[slotID]
+		slot.ItemType = 2
+		slot.JudgementStat = int64(index)
+		err = slot.Update()
+		database.InventoryItems.Add(slot.ID, slot)
+		resp := utils.Packet{}
+		resp.Concat(slot.GetData(int16(slotID)))
+		resp.Concat(s.Character.GetGold())
+		return resp, nil
+	}
 	return nil, nil
 }
 
@@ -618,6 +881,51 @@ func (h *ReplaceHTItemHandler) Handle(s *database.Socket, data []byte) ([]byte, 
 
 	resp.Concat(r)
 	resp.Concat(slots[to].GetData(to))
+	return resp, nil
+}
+
+func (h *InspectItemHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+	if s.User.UserType < server.COMMON_USER {
+		return nil, nil
+	}
+	resp := utils.Packet{0xaa, 0x55, 0xf1, 0x02, 0x62, 0x01, 0x0a, 0x00, 0x11, 0x55, 0xaa}
+	pseudoID := uint16(utils.BytesToInt(data[6:8], true))
+	index := 9
+	char := database.FindCharacterByPseudoID(s.User.ConnectedServer, pseudoID)
+	slots := char.GetEquipedItemSlots()
+	inventory, err := char.InventorySlots()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, s := range slots {
+		slot := inventory[s]
+		//id := utils.IntToBytes(uint64(s), 2, true)
+		plus := 161 + slot.Plus
+		resp.Insert(utils.IntToBytes(uint64(slot.ItemID), 4, true), index) // item id
+		index += 4
+		resp.Insert(utils.IntToBytes(uint64(plus), 2, true), index)
+		index += 2
+		resp.Insert([]byte{0x01, 0x00}, index) //ELVILEG UGYAN AZ MINDIG
+		index += 2
+		resp.Insert(utils.IntToBytes(uint64(s), 2, true), index) // item slot
+		index += 2
+		resp.Insert(slot.GetUpgrades(), index) // item plus
+		index += 15
+		resp.Insert([]byte{0x00, 0x00}, index)
+		index += 2
+		resp.Insert(utils.IntToBytes(uint64(slot.SocketCount), 2, true), index) //SOCKET LATER MUST FIX
+		index += 2
+		resp.Insert(slot.GetSockets(), index) // item plus
+		index += 15
+		if slot.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), index-6)
+			if slot.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), index-5)
+			}
+		}
+	}
+
 	return resp, nil
 }
 
@@ -820,7 +1128,30 @@ func (h *ActivateTimeLimitedItemHandler2) Handle(s *database.Socket, data []byte
 	return resp, nil
 }
 
+func (h *ToggleMountPetHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+
+	return s.Character.ToggleMountPet(), nil
+}
+
 func (h *TogglePetHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
 
 	return s.Character.TogglePet(), nil
+}
+
+func (h *PetCombatModeHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+	CombatMode := utils.BytesToInt(data[7:8], true)
+	slots, err := s.Character.InventorySlots()
+	if err != nil {
+		log.Println(err)
+		return nil, nil
+	}
+	petSlot := slots[0x0A]
+	pet := petSlot.Pet
+	if pet == nil || petSlot.ItemID == 0 || !pet.IsOnline {
+		return nil, nil
+	}
+	pet.PetCombatMode = int16(CombatMode)
+	resp := PET_COMBAT
+	resp.Insert(utils.IntToBytes(uint64(CombatMode), 1, true), 9)
+	return resp, nil
 }

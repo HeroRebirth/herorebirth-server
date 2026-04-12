@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 	gorp "gopkg.in/gorp.v1"
 	null "gopkg.in/guregu/null.v3"
@@ -20,20 +21,20 @@ var (
 )
 
 type User struct {
-	ID              string    `db:"id" json:"ID"`
-	Username        string    `db:"user_name" json:"Username"`
-	Password        string    `db:"password" json:"Password"`
-	UserType        int8      `db:"user_type" json:"UserType"`
-	ConnectedIP     string    `db:"ip" json:"ConnectedIP"`
-	ConnectedServer int       `db:"server" json:"ConnectedServer"`
-	NCash           uint64    `db:"ncash" json:"NCash"`
-	BankGold        uint64    `db:"bank_gold" json:"BankGold"`
-	Mail            string    `db:"mail" json:"Mail"`
-	CreatedAt       null.Time `db:"created_at" json:"createdAt"`
-	DisabledUntil   null.Time `db:"disabled_until" json:"disabledUntil"`
-
-	ConnectingIP string `db:"-"`
-	ConnectingTo int    `db:"-"`
+	ID                 string    `db:"id" json:"ID"`
+	Username           string    `db:"user_name" json:"Username"`
+	Password           string    `db:"password" json:"Password"`
+	UserType           int8      `db:"user_type" json:"UserType"`
+	ConnectedIP        string    `db:"ip" json:"ConnectedIP"`
+	ConnectedServer    int       `db:"server" json:"ConnectedServer"`
+	NCash              uint64    `db:"ncash" json:"NCash"`
+	BankGold           uint64    `db:"bank_gold" json:"BankGold"`
+	Mail               string    `db:"mail" json:"Mail"`
+	CreatedAt          null.Time `db:"created_at" json:"createdAt"`
+	DisabledUntil      null.Time `db:"disabled_until" json:"disabledUntil"`
+	IsLoginedFromPanel bool      `db:"loginfrompanel" json:"loginfrompanel"`
+	ConnectingIP       string    `db:"-"`
+	ConnectingTo       int       `db:"-"`
 
 	bank []*InventorySlot `db:"-" json:"-"`
 }
@@ -85,6 +86,33 @@ func FindUserByName(name string) (*User, error) {
 	userMutex.Lock()
 	defer userMutex.Unlock()
 	users[u.ID] = u
+
+	return u, nil
+}
+
+func FindUserByNameCash(name string) (*User, error) {
+
+	usersCache := AllUsers()
+
+	for _, u := range usersCache {
+		if u.Username == name {
+			return u, nil
+		}
+	}
+
+	query := `select * from hops.users where user_name = $1`
+
+	u := &User{}
+	if err := db.SelectOne(&u, query, name); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("FindUserByName: %s", err.Error())
+	}
+
+	userMutex.Lock()
+	defer userMutex.Unlock()
+	users[u.Username] = u
 
 	return u, nil
 }
@@ -193,6 +221,7 @@ func FindUsersInServer(server int) ([]*User, error) {
 func (u *User) Logout() {
 	u.ConnectedIP = ""
 	u.ConnectedServer = 0
+	u.IsLoginedFromPanel = false
 	go u.Update()
 }
 
@@ -226,7 +255,7 @@ func (u *User) GetTime() []byte {
 
 	resp := CLOCK
 
-	serverName := fmt.Sprintf("Dragon %d", u.ConnectedServer)
+	serverName := fmt.Sprintf("Evolution World %d", u.ConnectedServer)
 	resp[7] = byte(len(serverName))
 	resp.Insert([]byte(serverName), 8)
 
@@ -263,4 +292,19 @@ func (u *User) GetTime() []byte {
 	index += 2
 
 	return resp
+}
+func RefreshUsers() error {
+
+	query := `select * from hops.users`
+
+	users := []*User{}
+
+	if _, err := db.Select(&users, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getusers: %s", err.Error())
+	}
+
+	return nil
 }

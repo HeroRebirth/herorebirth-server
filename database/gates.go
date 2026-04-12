@@ -4,7 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	gorp "gopkg.in/gorp.v1"
 )
 

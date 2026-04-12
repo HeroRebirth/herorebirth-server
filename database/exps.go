@@ -11,6 +11,9 @@ type ExpInfo struct {
 	Level       int16 `db:"level"`
 	Exp         int64 `db:"exp"`
 	SkillPoints int   `db:"skill_points"`
+
+	StatPoints   int `db:"stat_points"`
+	NaturePoints int `db:"nature_points"`
 }
 
 var (
@@ -37,6 +40,24 @@ func (e *ExpInfo) Delete() error {
 }
 
 func getExps() error {
+
+	var arr []*ExpInfo
+	query := `select * from data.exp_table`
+
+	if _, err := db.Select(&arr, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return nil
+	}
+
+	for _, e := range arr {
+		EXPs[e.Level] = e
+	}
+	return nil
+}
+
+func GetExps() error {
 
 	var arr []*ExpInfo
 	query := `select * from data.exp_table`

@@ -1,13 +1,14 @@
 package npc
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/utils"
 )
 
 type (
 	CreateSocketHandler  struct{}
 	UpgradeSocketHandler struct{}
+	CoProductionHandler  struct{}
 )
 
 var (
@@ -15,7 +16,6 @@ var (
 )
 
 func (h *CreateSocketHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
-
 	slots, err := s.Character.InventorySlots()
 	if err != nil {
 		return nil, err
@@ -87,4 +87,34 @@ func (h *UpgradeSocketHandler) Handle(s *database.Socket, data []byte) ([]byte, 
 	}
 
 	return s.Character.UpgradeSocket(slots[itemSlot], slots[socketSlot], special, edit, itemSlot, socketSlot, specialSlot, editSlot, locks)
+}
+
+func (h *CoProductionHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
+	resp := utils.Packet{}
+	craftID := int(utils.BytesToInt(data[6:10], true))
+	bFinished := int(data[10])
+	canCraft := true
+	production := database.CraftItems[int(craftID)]
+	prodMaterials, err := production.GetMaterials()
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < len(prodMaterials); i++ {
+		matItemId := int64(prodMaterials[i].ID)
+		matCount := uint(prodMaterials[i].Count)
+		slotID, _, _ := s.Character.FindItemInInventory(nil, matItemId)
+		slots, err := s.Character.InventorySlots()
+		if err != nil {
+			return nil, err
+		}
+		item := slots[slotID]
+		if item.Quantity < matCount {
+			canCraft = false
+		}
+	}
+	if canCraft {
+		prod, _ := s.Character.CoProduction(craftID, bFinished)
+		resp.Concat(prod)
+	}
+	return resp, nil
 }

@@ -1,7 +1,7 @@
 package messaging
 
 import (
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
 )
 
 var (

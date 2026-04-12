@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/gold"
+	"hero-emulator/gold"
+
 	"github.com/thoas/go-funk"
 	gorp "gopkg.in/gorp.v1"
 	null "gopkg.in/guregu/null.v3"
@@ -71,7 +72,7 @@ func (e *ConsignmentItem) Update() error {
 
 func GetConsignmentItems(page, category, minUpgLevel, maxUpgLevel, orderBy int, minPrice, maxPrice uint64, itemName string) ([]*ConsignmentItem, int64, error) {
 
-	if maxPrice == 50*gold.B {
+	if maxPrice == 150*gold.B {
 		maxPrice = math.MaxInt64
 	}
 

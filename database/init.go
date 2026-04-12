@@ -7,17 +7,21 @@ import (
 	"os"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/config"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/config"
+	"hero-emulator/logging"
+	"hero-emulator/utils"
+
 	_ "github.com/lib/pq"
 	gorp "gopkg.in/gorp.v1"
 )
 
 var (
-	DROP_LIFETIME = time.Duration(30) * time.Second
-	DROP_RATE     = utils.ParseFloat(os.Getenv("DROP_RATE"))
-	EXP_RATE      = utils.ParseFloat(os.Getenv("EXP_RATE"))
+	DROP_LIFETIME     = time.Duration(30) * time.Second
+	FREEDROP_LIFETIME = time.Duration(3) * time.Second
+	DROP_RATE         = utils.ParseFloat("10.0")
+	DEFAULT_DROP_RATE = utils.ParseFloat("10.0")
+	EXP_RATE          = utils.ParseFloat("500.0")
+	DEFAULT_EXP_RATE  = utils.ParseFloat("500.0")
 )
 
 var (
@@ -74,6 +78,7 @@ func InitDB() error {
 	db.AddTableWithNameAndSchema(Item{}, "data", "items").SetKeys(false, "id")
 	db.AddTableWithNameAndSchema(SkillInfo{}, "data", "skills").SetKeys(false, "id")
 	db.AddTableWithNameAndSchema(Production{}, "data", "productions")
+	db.AddTableWithNameAndSchema(CraftItem{}, "data", "craft_items")
 	db.AddTableWithNameAndSchema(Stackable{}, "data", "stackables")
 	db.AddTableWithNameAndSchema(Gambling{}, "data", "gambling")
 	db.AddTableWithNameAndSchema(JobPassive{}, "data", "job_passives")
@@ -91,8 +96,14 @@ func InitDB() error {
 	db.AddTableWithNameAndSchema(BuffInfection{}, "data", "buff_infections").SetKeys(false, "id")
 	db.AddTableWithNameAndSchema(Shop{}, "data", "shop_table").SetKeys(false, "id")
 	db.AddTableWithNameAndSchema(ShopItem{}, "data", "shop_items").SetKeys(false, "type")
+	db.AddTableWithNameAndSchema(RelicLog{}, "data", "relic_log")
+	db.AddTableWithNameAndSchema(RelicLog{}, "data", "item_set")
+	db.AddTableWithNameAndSchema(Rank{}, "data", "reborn_system").SetKeys(false, "id")
+	db.AddTableWithNameAndSchema(ItemJudgement{}, "data", "item_judgement")
+	db.AddTableWithNameAndSchema(FiveClan{}, "data", "fiveclan_war").SetKeys(false, "id")
 
 	db.AddTableWithNameAndSchema(AI{}, "hops", "ai").SetKeys(true, "id")
+	db.AddTableWithNameAndSchema(AiBuff{}, "hops", "ai_buffs").SetKeys(false, "id")
 	db.AddTableWithNameAndSchema(Character{}, "hops", "characters").SetKeys(true, "id")
 	db.AddTableWithNameAndSchema(Buff{}, "hops", "characters_buffs").SetKeys(false, "id", "character_id")
 	db.AddTableWithNameAndSchema(ConsignmentItem{}, "hops", "consignment").SetKeys(false, "id")
@@ -143,9 +154,9 @@ func resetDB() error {
 
 func getAll() error {
 
-	callBacks := []func() error{getAllDrops, getScripts, getHaxCodes, getHTItems, getProductions, getAdvancedFusions, getItemMeltings, getGates,
-		getStackables, getAllItems, getSkillInfos, getGamblingItems, getJobPassives, getBuffIcons, getBuffInfections, getExps, getAllSavePoints,
-		getRelics, GetAllPetExps, GetAllPets, getAllShops, getAllShopItems}
+	callBacks := []func() error{getAllDrops, getScripts, getHaxCodes, getHTItems, getProductions, getCraftItem, getAdvancedFusions, getItemMeltings, getGates,
+		getStackables, getAllItems, getSkillInfos, getGamblingItems, getJobPassives, getItemJudgements, getItemSet, getBuffIcons, getBuffInfections, getExps, getAllSavePoints,
+		getRelics, getRelicLog, GetAllPetExps, GetAllPets, getAllShops, getAllShopItems}
 
 	for _, cb := range callBacks {
 		if err := cb(); err != nil {

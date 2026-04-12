@@ -57,3 +57,21 @@ func getGamblingItems() error {
 
 	return nil
 }
+
+func RefreshGamblingItems() error {
+	var gamblings []*Gambling
+	query := `select * from data.gambling`
+
+	if _, err := db.Select(&gamblings, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getGamblingItems: %s", err.Error())
+	}
+
+	for _, g := range gamblings {
+		GamblingItems[g.ID] = g
+	}
+
+	return nil
+}

@@ -1,10 +1,11 @@
 package auth
 
 import (
+	"encoding/binary"
 	"sort"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/utils"
 )
 
 type ListCharactersHandler struct {
@@ -12,7 +13,7 @@ type ListCharactersHandler struct {
 }
 
 var (
-	CHARACTER_LIST = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x01, 0x02, 0x0A, 0x00, 0x01, 0x00, 0x00, 0x55, 0xAA}
+	CHARACTER_LIST = utils.Packet{0xAA, 0x55, 0x00, 0x00, 0x01, 0x02, 0x0A, 0x00, 0x01, 0x01, 0x00, 0x55, 0xAA}
 	NO_CHARACTERS  = utils.Packet{0xAA, 0x55, 0x07, 0x00, 0x01, 0x02, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA}
 )
 
@@ -29,7 +30,10 @@ func (lch *ListCharactersHandler) listCharacters(s *database.Socket) ([]byte, er
 	if user == nil /*|| user.ConnectingIP == ""*/ {
 		return nil, nil
 	}
-
+	if user.IsLoginedFromPanel == false {
+		database.GetSocket(s.User.ID).Conn.Close()
+		return nil, nil
+	}
 	s.User = user
 	s.ClientAddr = s.User.ConnectingIP
 	s.User.ConnectedIP = s.ClientAddr
@@ -37,7 +41,7 @@ func (lch *ListCharactersHandler) listCharacters(s *database.Socket) ([]byte, er
 	s.User.ConnectingTo = 0
 	s.User.ConnectingIP = ""
 	s.Add(s.User.ID)
-
+	database.FindCharactersByUserID(s.User.ID)
 	go s.User.Update()
 	return lch.showCharacterMenu(s)
 }
@@ -52,7 +56,6 @@ func (lch *ListCharactersHandler) showCharacterMenu(s *database.Socket) ([]byte,
 	if len(characters) == 0 {
 		return NO_CHARACTERS, nil
 	}
-
 	sort.Slice(characters, func(i, j int) bool {
 		if characters[i].CreatedAt.Time.Sub(characters[j].CreatedAt.Time) < 0 {
 			return true
@@ -61,8 +64,8 @@ func (lch *ListCharactersHandler) showCharacterMenu(s *database.Socket) ([]byte,
 	})
 
 	resp := CHARACTER_LIST
-
-	length := 7
+	//return resp, nil
+	length := 8
 	resp[9] = byte(characters[0].Faction)
 	resp[10] = byte(len(characters))
 
@@ -88,14 +91,20 @@ func (lch *ListCharactersHandler) showCharacterMenu(s *database.Socket) ([]byte,
 		resp.Insert(utils.IntToBytes(uint64(c.Level), 4, true), index) //character level
 		index += 4
 
-		resp.Insert([]byte{0x3E}, index)
+		resp.Insert([]byte{0x3E}, index) //0x3E volt
 		index += 1
 
 		resp.Insert([]byte{byte(c.WeaponSlot)}, index) // character weapon slot
 		index += 1
 
-		resp.Insert([]byte{0x00, 0x00, 0x4B, 0xFF, 0xE6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, index)
-		index += 13
+		resp.Insert([]byte{0x00, 0x00}, index)
+		index += 2
+		resp.Insert(utils.IntToBytes(uint64(c.HeadStyle), 4, true), index)
+		index += 4
+		resp.Insert(utils.IntToBytes(uint64(c.FaceStyle), 4, true), index)
+		index += 4
+		resp.Insert([]byte{0x00, 0x00, 0x00}, index)
+		index += 3
 
 		slots := c.GetAppearingItemSlots()
 		inventory, err := c.InventorySlots()
@@ -105,22 +114,29 @@ func (lch *ListCharactersHandler) showCharacterMenu(s *database.Socket) ([]byte,
 
 		for i, s := range slots {
 			slot := inventory[s]
+			itemID := slot.ItemID
+			if slot.Appearance != 0 {
+				itemID = slot.Appearance
+			} else if slot.Appearance == 0 && itemID == 0 {
 
-			resp.Insert(utils.IntToBytes(uint64(slot.ItemID), 4, true), index) // item id
+			}
+			resp.Insert(utils.IntToBytes(uint64(itemID), 4, true), index) // item id
 			index += 4
-
 			resp.Insert([]byte{0x00, 0x00, 0x00}, index)
 			index += 3
-
 			resp.Insert(utils.IntToBytes(uint64(i), 2, true), index) // item slot
 			index += 2
 
 			resp.Insert([]byte{byte(slot.Plus), 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, index) // item plus
 			index += 13
 		}
+		resp.Insert([]byte{0x00, 0x26, 0x26, 0x26, 0x26, 0x26, 0x26, 0x26, 0x26, 0x26, 0x26}, index)
+		index += 11
+		/*resp.Insert([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, index)
+		index += 10
+		resp.Insert([]byte{0x00}, index)*/
 	}
-
-	resp.SetLength(int16(length))
+	resp.SetLength(int16(binary.Size(resp) - 6))
 	return resp, nil
 }
 

@@ -6,10 +6,10 @@ import (
 
 	NATS "github.com/nats-io/nats.go"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	nats "github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/server"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	nats "hero-emulator/nats"
+	"hero-emulator/server"
+	"hero-emulator/utils"
 )
 
 type CharacterSelectionHandler struct {

@@ -70,3 +70,21 @@ func getProductions() error {
 
 	return nil
 }
+
+func RefreshProductions() error {
+	var prods []*Production
+	query := `select * from data.productions`
+
+	if _, err := db.Select(&prods, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getProductions: %s", err.Error())
+	}
+
+	for _, p := range prods {
+		Productions[p.ID] = p
+	}
+
+	return nil
+}

@@ -51,3 +51,21 @@ func getScripts() error {
 
 	return nil
 }
+
+func RefreshScripts() error {
+	var scripts []*NPCScript
+	query := `select * from data.npc_scripts`
+
+	if _, err := db.Select(&scripts, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getScripts: %s", err.Error())
+	}
+
+	for _, s := range scripts {
+		NPCScripts[s.ID] = s
+	}
+
+	return nil
+}

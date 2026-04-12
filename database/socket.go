@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	"github.com/nats-io/nats.go"
 )
 
@@ -151,25 +153,38 @@ func (s *Socket) recognizePacket(data []byte) ([]byte, error) {
 			continue
 		}
 
-		header, body := []byte{}, []byte{}
-		if bytes.Contains(packet, []byte{0xAA, 0x55}) {
-			pParts := bytes.Split(packet, []byte{0xAA, 0x55})
-			if len(pParts) == 1 {
-				body = append([]byte{0xAA, 0x55}, pParts[0]...)
+		if os.Getenv("PROXY_ENABLED") == "1" {
+			header, body := []byte{}, []byte{}
+			if bytes.Contains(packet, []byte{0xAA, 0x55}) {
+				pParts := bytes.Split(packet, []byte{0xAA, 0x55})
+				if len(pParts) == 1 {
+					body = append([]byte{0xAA, 0x55}, pParts[0]...)
 
+				} else {
+					header = pParts[0]
+					body = append([]byte{0xAA, 0x55}, pParts[1]...)
+				}
 			} else {
-				header = pParts[0]
-				body = append([]byte{0xAA, 0x55}, pParts[1]...)
+				header = packet
 			}
+
+			s.ParseHeader(header)
+
+			if len(body) > 0 {
+				sign := uint16(utils.BytesToInt(body[4:6], false))
+				d, err := Handler(s, body, sign)
+				if err != nil {
+					return nil, err
+				}
+
+				resp.Concat(d)
+			}
+
 		} else {
-			header = packet
-		}
+			s.ClientAddr = s.Conn.RemoteAddr().String()
 
-		s.ParseHeader(header)
-
-		if len(body) > 0 {
-			sign := uint16(utils.BytesToInt(body[4:6], false))
-			d, err := Handler(s, body, sign)
+			sign := uint16(utils.BytesToInt(packet[4:6], false))
+			d, err := Handler(s, packet, sign)
 			if err != nil {
 				return nil, err
 			}

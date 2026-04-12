@@ -2,11 +2,13 @@ package player
 
 import (
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/nats"
+	"hero-emulator/utils"
 )
 
 type MovementHandler struct {
@@ -30,6 +32,27 @@ func (h *MovementHandler) Handle(s *database.Socket, data []byte) ([]byte, error
 
 	if len(data) < 26 {
 		return nil, nil
+	}
+	if c.Map == 255 && database.IsFactionWarEntranceActive() {
+		parts := strings.Split(c.Coordinate, ",")
+		y := strings.Trim(parts[1], ")")
+		py := strings.Split(y, ".")
+		y = py[0]
+		posY, _ := strconv.ParseInt(y, 10, 64)
+		if c.Faction == 1 && posY < 440 {
+
+			coordinate := &utils.Location{X: 325, Y: 465}
+			gomap, _ := c.ChangeMap(255, coordinate)
+			c.Socket.Write(gomap)
+
+		}
+		if c.Faction == 2 && posY > 80 {
+
+			coordinate := &utils.Location{X: 179, Y: 45}
+			gomap, _ := c.ChangeMap(255, coordinate)
+			c.Socket.Write(gomap)
+
+		}
 	}
 
 	movType := utils.BytesToInt(data[4:6], false)
@@ -63,6 +86,29 @@ func (h *MovementHandler) Handle(s *database.Socket, data []byte) ([]byte, error
 	c.MovementToken = token
 
 	target := &utils.Location{X: utils.BytesToFloat(data[18:22], true), Y: utils.BytesToFloat(data[22:26], true)}
+	if c.IsinWar && !database.WarStarted {
+		if coordinate.X >= 155 && c.Faction == 1 && target.X > 155 || target.Y > 65 && c.Faction == 1 {
+			target.X = 155
+			target.Y = coordinate.Y
+			if target.Y > 65 {
+				target.Y = 65
+			}
+			c.SetCoordinate(target)
+			mapID, _ := s.Character.ChangeMap(c.Map, target)
+			s.Conn.Write(mapID)
+			return nil, nil
+		} else if coordinate.X >= 147 && c.Faction == 2 && target.X > 147 || target.Y < 457 && c.Faction == 2 {
+			target.X = 147
+			target.Y = coordinate.Y
+			if target.Y < 457 {
+				target.Y = 457
+			}
+			c.SetCoordinate(target)
+			mapID, _ := s.Character.ChangeMap(c.Map, target)
+			s.Conn.Write(mapID)
+			return nil, nil
+		}
+	}
 	distance := utils.CalculateDistance(coordinate, target)
 	delay := distance * 1000 / speed // delay (ms)
 	time.AfterFunc(time.Duration(delay)*time.Millisecond, func() {
@@ -72,7 +118,7 @@ func (h *MovementHandler) Handle(s *database.Socket, data []byte) ([]byte, error
 	})
 
 	if speed > 5.6 {
-		s.Stats.CHI -= int(speed)
+		s.Stats.CHI -= int(speed) / 2
 		if s.Stats.CHI < 0 {
 			s.Stats.CHI = 0
 		}

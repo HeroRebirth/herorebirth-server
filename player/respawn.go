@@ -1,9 +1,9 @@
 package player
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/nats"
+	"hero-emulator/utils"
 )
 
 type RespawnHandler struct {

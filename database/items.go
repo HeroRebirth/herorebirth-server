@@ -9,7 +9,7 @@ import (
 
 var (
 	Items         = make(map[int64]*Item)
-	STRRates      = []int{400, 350, 300, 250, 200, 175, 150, 125, 100, 75, 50, 40, 30, 20, 15}
+	STRRates      = []int{1000, 800, 700, 500, 400, 100, 120, 100, 75, 50, 40, 30, 20, 15, 5}
 	socketOrePlus = map[int64]byte{17402319: 1, 17402320: 2, 17402321: 3, 17402322: 4, 17402323: 5}
 	haxBoxes      = []int64{92000002, 92000003, 92000004, 92000005, 92000006, 92000007, 92000008, 92000009, 92000010}
 )
@@ -46,6 +46,7 @@ const (
 	RESET_ART_TYPE
 	RESET_ARTS_TYPE
 	FORM_TYPE
+	MASTER_HT_ACC
 	UNKNOWN_TYPE
 )
 
@@ -101,7 +102,15 @@ type Item struct {
 	Tradable        bool    `db:"tradable"`
 	MinUpgradeLevel int16   `db:"min_upgrade_level"`
 	NPCID           int     `db:"npc_id"`
+	SpecialItem     int64   `db:"special_item"`
 	RunningSpeed    float64 `db:"running_speed"`
+	ItemBuff        int     `db:"item_buff"`
+	PoisonATK       int     `db:"poison_atk"`
+	PoisonDEF       int     `db:"poison_def"`
+	ConfusionATK    int     `db:"confusion_atk"`
+	ConfusionDEF    int     `db:"confusion_def"`
+	ParalysisATK    int     `db:"paralysis_atk"`
+	ParalysisDEF    int     `db:"paralysis_def"`
 }
 
 func (item *Item) Create() error {
@@ -131,12 +140,14 @@ func (item *Item) GetType() int {
 		return BAG_EXPANSION_TYPE
 	} else if item.Type == 64 {
 		return MARBLE_TYPE
-	} else if (item.Type >= 70 && item.Type <= 71) || (item.Type >= 99 && item.Type <= 108) {
+	} else if (item.Type >= 70 && item.Type <= 71) || (item.Type >= 99 && item.Type <= 108) || item.Type == 44 || item.Type == 49 {
 		return WEAPON_TYPE
 	} else if item.Type == 80 {
 		return SOCKET_TYPE
 	} else if item.Type == 81 {
 		return HOLY_WATER_TYPE
+	} else if item.Type == 90 {
+		return MASTER_HT_ACC
 	} else if item.Type == 110 {
 		return AFFLICTION_TYPE
 	} else if item.Type == 111 {
@@ -145,9 +156,9 @@ func (item *Item) GetType() int {
 		return RESET_ARTS_TYPE
 	} else if item.Type == 115 {
 		return INGREDIENTS_TYPE
-	} else if item.Type >= 121 && item.Type <= 124 && item.HtType == 0 {
+	} else if item.Type >= 121 && item.Type <= 124 && (item.HtType == 0 || item.HtType == 4) {
 		return ARMOR_TYPE
-	} else if ((item.Type >= 121 && item.Type <= 124) || item.Type == 175) && item.HtType > 0 {
+	} else if ((item.Type >= 121 && item.Type <= 124) || item.Type == 175) && item.HtType > 0 && item.HtType != 4 {
 		return HT_ARMOR_TYPE
 	} else if item.Type >= 131 && item.Type <= 134 {
 		return ACC_TYPE
@@ -185,11 +196,34 @@ func (item *Item) GetType() int {
 		return DEAD_SPIRIT_INCENSE_TYPE
 	} else if item.Type == 233 {
 		return NPC_SUMMONER_TYPE
+	} else if item.Type == 2331 {
+		return MOVEMENT_SCROLL_TYPE
 	}
 	return UNKNOWN_TYPE
 }
 
 func getAllItems() error {
+
+	query := `select * from data.items`
+
+	items := []*Item{}
+
+	if _, err := db.Select(&items, query); err != nil {
+		fmt.Println("Error:", err)
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getAllItems: %s", err.Error())
+	}
+
+	for _, item := range items {
+		Items[item.ID] = item
+	}
+
+	return nil
+}
+
+func RefreshAllItems() error {
 
 	query := `select * from data.items`
 
@@ -216,6 +250,8 @@ func (item *Item) CanUse(t byte) bool {
 	} else if (item.Type == 70 || item.Type == 71) && (t == 70 || t == 71) {
 		return true
 	} else if (item.Type == 102 || item.Type == 103) && (t == 102 || t == 103) {
+		return true
+	} else if item.Type == 44 || item.Type == 49 {
 		return true
 	}
 

@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/nats"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 )
 
@@ -46,9 +47,11 @@ type AI struct {
 }
 
 var (
-	AIs         = make(map[int]*AI)
-	AIsByMap    []map[int16][]*AI
-	eventBosses = []int{50009, 50010}
+	AIs             = make(map[int]*AI)
+	DungeonsAiByMap []map[int16][]*AI
+	AIsByMap        []map[int16][]*AI
+	DungeonsByMap   []map[int16]int
+	eventBosses     = []int{50009, 50010}
 
 	MOB_MOVEMENT    = utils.Packet{0xAA, 0x55, 0x21, 0x00, 0x33, 0x00, 0xBC, 0xDB, 0x9F, 0x41, 0x52, 0x70, 0xA2, 0x41, 0x00, 0x55, 0xAA}
 	MOB_ATTACK      = utils.Packet{0xAA, 0x55, 0x0C, 0x00, 0x41, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x55, 0xAA}
@@ -59,7 +62,10 @@ var (
 	ITEM_DROPPED = utils.Packet{0xAA, 0x55, 0x42, 0x00, 0x67, 0x02, 0x01, 0x01, 0x7A, 0xFB, 0x7B, 0xBF, 0x00, 0xA2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x55, 0xAA}
 
-	MOB_APPEARED = utils.Packet{0xAA, 0x55, 0x54, 0x00, 0x31, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x09, 0x57, 0x69, 0x6C, 0x64, 0x20, 0x42, 0x6F, 0x61, 0x72, 0x01, 0x01,
+	STONE_APPEARED = utils.Packet{0xAA, 0x55, 0x57, 0x00, 0x31, 0x01, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x45, 0x6d, 0x70, 0x69, 0x72, 0x65, 0x20, 0x53, 0x74, 0x6f, 0x6e, 0x65, 0x01, 0x01,
+		0x8E, 0xE5, 0x38, 0xC0, 0xD9, 0xB8, 0x05, 0xC0, 0x00, 0x00, 0x00, 0x40, 0xFF, 0xFF, 0x00, 0xFC, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x55, 0xAA}
+
+	MOB_APPEARED = utils.Packet{0xAA, 0x55, 0x54, 0x00, 0x31, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01,
 		0x8E, 0xE5, 0x38, 0xC0, 0xD9, 0xB8, 0x05, 0xC0, 0x00, 0x00, 0x00, 0x40, 0xFF, 0xFF, 0x00, 0xFC, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x55, 0xAA}
 
 	DROP_DISAPPEARED = utils.Packet{0xAA, 0x55, 0x04, 0x00, 0x67, 0x04, 0x55, 0xAA}
@@ -101,6 +107,9 @@ func GetAllAI() error {
 		AIs[a.ID] = a
 	}
 
+	return nil
+}
+func getAllDungeon(mob int) error {
 	return nil
 }
 
@@ -147,7 +156,20 @@ func (ai *AI) FindTargetCharacterID() (int, error) {
 
 	filtered = funk.Shuffle(filtered)
 	characters := filtered.([]*Character)
+
+	npc := npcPos.NPCID
 	if len(characters) > 0 {
+
+		for _, factionNPC := range ZhuangFactionMobs {
+			if factionNPC == npc && characters[0].Faction == 1 {
+				return 0, nil
+			}
+		}
+		for _, factionNPC := range ShaoFactionMobs {
+			if factionNPC == npc && characters[0].Faction == 2 {
+				return 0, nil
+			}
+		}
 		return characters[0].ID, nil
 	}
 
@@ -209,6 +231,16 @@ func (ai *AI) Attack() []byte {
 	if npc == nil {
 		return nil
 	}
+	for _, factionNPC := range ZhuangFactionMobs {
+		if factionNPC == npc.ID && character.Faction == 1 {
+			return nil
+		}
+	}
+	for _, factionNPC := range ShaoFactionMobs {
+		if factionNPC == npc.ID && character.Faction == 2 {
+			return nil
+		}
+	}
 
 	stat := character.Socket.Stats
 
@@ -217,7 +249,7 @@ func (ai *AI) Attack() []byte {
 
 	reqAcc := float64(stat.Dodge) + float64(character.Level-int(npc.Level))*10
 	//probability := reqAcc
-	if utils.RandInt(0, 1000) < int64(reqAcc) {
+	if utils.RandInt(0, 2000) < int64(reqAcc) {
 		damage = 0
 	}
 
@@ -250,6 +282,16 @@ func (ai *AI) CastSkill() []byte {
 	if npc == nil {
 		return nil
 	}
+	for _, factionNPC := range ZhuangFactionMobs {
+		if factionNPC == npc.ID && character.Faction == 1 {
+			return nil
+		}
+	}
+	for _, factionNPC := range ShaoFactionMobs {
+		if factionNPC == npc.ID && character.Faction == 2 {
+			return nil
+		}
+	}
 
 	stat := character.Socket.Stats
 
@@ -257,7 +299,7 @@ func (ai *AI) CastSkill() []byte {
 	damage := int(math.Max(float64(rawDamage-stat.ArtsDEF), 3))
 
 	reqAcc := float64(stat.Dodge) + float64(character.Level-int(npc.Level))*10
-	if utils.RandInt(0, 1000) < int64(reqAcc) {
+	if utils.RandInt(0, 2000) < int64(reqAcc) {
 		damage = 0
 	}
 
@@ -296,6 +338,16 @@ func (ai *AI) AttackPet() []byte {
 	npc := NPCs[pos.NPCID]
 	if npc == nil {
 		return nil
+	}
+	for _, factionNPC := range ZhuangFactionMobs {
+		if factionNPC == npc.ID {
+			return nil
+		}
+	}
+	for _, factionNPC := range ShaoFactionMobs {
+		if factionNPC == npc.ID {
+			return nil
+		}
 	}
 
 	if pet.Target == 0 {
@@ -338,6 +390,16 @@ func (ai *AI) CastSkillToPet() []byte {
 	npc := NPCs[pos.NPCID]
 	if npc == nil {
 		return nil
+	}
+	for _, factionNPC := range ZhuangFactionMobs {
+		if factionNPC == npc.ID {
+			return nil
+		}
+	}
+	for _, factionNPC := range ShaoFactionMobs {
+		if factionNPC == npc.ID {
+			return nil
+		}
 	}
 
 	rawDamage := int(utils.RandInt(int64(npc.MinArtsATK), int64(npc.MaxArtsATK)))
@@ -488,20 +550,23 @@ func (ai *AI) DropHandler(claimer *Character) {
 		return
 	}
 
-	isEventBoss := false
+	isEventBoss := true
 	bossMultiplier, dropCount, count, minCount := 0.0, 0, 0, 0
 	baseLocation := ConvertPointToLocation(ai.Coordinate)
 	if funk.Contains(bosses, npc.ID) {
-		bossMultiplier = 5.0
+		bossMultiplier = 2.0
 		minCount = 12
 
 	} else if funk.Contains(eventBosses, npc.ID) {
-		bossMultiplier = 50.0
+		bossMultiplier = 7.0
 		minCount = 48
 		isEventBoss = true
 
 	} else if !npcPos.Attackable && claimer.PickaxeActivated() {
 		bossMultiplier = 0.4
+	}
+	if ai.Map == 27 {
+		bossMultiplier = 0.1
 	}
 
 BEGIN:
@@ -520,8 +585,12 @@ BEGIN:
 		items := drop.GetItems()
 
 		probabilities := drop.GetProbabilities()
-
 		totalDropRate := (DROP_RATE * (claimer.DropMultiplier + claimer.AdditionalDropMultiplier)) + bossMultiplier
+		if ai.Map == 27 {
+			totalDropRate = (1 * (claimer.DropMultiplier + claimer.AdditionalDropMultiplier)) + bossMultiplier
+		} else {
+			totalDropRate = (DROP_RATE * (claimer.DropMultiplier + claimer.AdditionalDropMultiplier)) + bossMultiplier
+		}
 		dropFailRate := float64(1000 - probabilities[len(probabilities)-1])
 		dropFailRate /= totalDropRate
 		newDropFailRate := 1000 - dropFailRate
@@ -580,6 +649,9 @@ BEGIN:
 
 	if itemID > 0 && !end { // can drop an item
 		count++
+		if count >= 100 {
+			return
+		}
 		go func() {
 			resp := utils.Packet{}
 			isRelic := false
@@ -603,12 +675,14 @@ BEGIN:
 
 				drop := NewSlot()
 				drop.ItemID = item.ID
+				drop.ItemType = 1
 				drop.Quantity = 1
 				drop.Plus = plus
 				if item.Timer > 0 {
 					drop.Quantity = uint(item.Timer)
+					drop.ItemType = 1
+					drop.Plus = 1
 				}
-
 				var upgradesArray []byte
 				itemType := item.GetType()
 				if itemType == WEAPON_TYPE {
@@ -667,16 +741,18 @@ BEGIN:
 					if isEventBoss {
 						dr.Claimer = nil
 					}
+					time.AfterFunc(FREEDROP_LIFETIME, func() { //ALL PLAYER CAN PICKUP THE ITEMS
+						dr.Claimer = nil
+					})
 
 					dr.GenerateIDForDrop(ai.Server, ai.Map)
 
 					dropID := uint16(dr.ID)
-
 					time.AfterFunc(DROP_LIFETIME, func() { // remove drop after timeout
 						ai.RemoveDrop(ai.Server, ai.Map, dropID)
 					})
 
-					r := ITEM_DROPPED
+					/*r := ITEM_DROPPED
 					r.Insert(utils.IntToBytes(uint64(dropID), 2, true), 6) // drop id
 
 					r.Insert(utils.FloatToBytes(offset.X+baseLocation.X, 4, true), 10) // drop coordinate-x
@@ -694,8 +770,7 @@ BEGIN:
 						r.Insert(utils.IntToBytes(uint64(claimer.PseudoID), 2, true), 36) // claimer id
 						r.SetLength(0x24)
 					}
-
-					resp.Concat(r)
+					resp.Concat(r)*/
 				}
 
 				p := nats.CastPacket{CastNear: true, MobID: ai.ID, Data: resp, Type: nats.ITEM_DROP}
@@ -780,7 +855,7 @@ func (ai *AI) AIHandler() {
 			c, err := FindCharacterByID(ai.TargetPlayerID)
 			if err != nil || c == nil || !c.IsOnline || c.Socket == nil || c.Socket.Stats.HP <= 0 {
 				ai.TargetPlayerID = 0
-
+				//ai.HP = npc.MaxHp
 			} else {
 				slots, _ := c.InventorySlots()
 				petSlot := slots[0x0A]
@@ -866,7 +941,7 @@ func (ai *AI) AIHandler() {
 				ai.TargetPlayerID = 0
 				ai.MovementToken = 0
 				ai.IsMoving = false
-
+				//ai.HP = npc.MaxHp
 			} else if distance <= 3 && pet.IsOnline && pet.HP > 0 { // attack
 				seed := utils.RandInt(1, 1000)
 				_, ok := SkillInfos[npc.SkillID]
@@ -898,6 +973,7 @@ func (ai *AI) AIHandler() {
 		} else if ai.TargetPlayerID > 0 { // Target mode player
 			character, err := FindCharacterByID(ai.TargetPlayerID)
 			if err != nil || character == nil || (character != nil && (!character.IsOnline || character.Invisible)) {
+				//ai.HP = npc.MaxHp
 				ai.TargetPlayerID = 0
 				goto OUT
 			}
@@ -912,7 +988,7 @@ func (ai *AI) AIHandler() {
 				ai.TargetPlayerID = 0
 				ai.MovementToken = 0
 				ai.IsMoving = false
-
+				//ai.HP = npc.MaxHp
 			} else if distance <= 5 && character.IsActive && stat.HP > 0 { // attack
 				seed := utils.RandInt(1, 1000)
 				_, ok := SkillInfos[npc.SkillID]

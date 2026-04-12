@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	gorp "gopkg.in/gorp.v1"
 )
 

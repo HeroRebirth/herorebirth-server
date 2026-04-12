@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/logging"
+	"hero-emulator/messaging"
+	"hero-emulator/utils"
 )
 
 type CancelCharacterCreationHandler struct {
@@ -15,6 +15,10 @@ type CharacterCreationHandler struct {
 	faction       int
 	height        int
 	name          string
+	headstyle     int64
+	facestyle     int64
+	Buff          int
+	itemid        int
 }
 
 var (
@@ -39,10 +43,6 @@ func (cch *CharacterCreationHandler) Handle(s *database.Socket, data []byte) ([]
 	cch.characterType = int(data[index])
 	index += 1
 
-	if cch.characterType == 52 { // Monk creation
-		return messaging.SystemMessage(messaging.INCORRECT_REGISTRATION), nil
-	}
-
 	characters, err := database.FindCharactersByUserID(s.User.ID)
 	if err != nil {
 		return nil, err
@@ -56,9 +56,11 @@ func (cch *CharacterCreationHandler) Handle(s *database.Socket, data []byte) ([]
 	index += 1
 
 	cch.height = int(data[index])
-	index += 1
-
-	// TODO => FACE AND HEAD
+	headint := utils.BytesToInt(data[index:index+4], true)
+	cch.headstyle = headint
+	index += 4
+	faceint := utils.BytesToInt(data[index:index+4], true)
+	cch.facestyle = faceint
 
 	return cch.createCharacter(s)
 }
@@ -74,7 +76,7 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 		return messaging.SystemMessage(messaging.EMPTY_FACTION), nil
 	}
 
-	coordinate := database.SavePoints[1]
+	coordinate := database.SavePoints[70]
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +92,8 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 		Class:          0,
 		IsOnline:       false,
 		IsActive:       false,
-		Gold:           0,
-		Map:            1,
+		Gold:           210000,
+		Map:            70,
 		Exp:            0,
 		HTVisibility:   0,
 		WeaponSlot:     3,
@@ -101,7 +103,9 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 		DropMultiplier: 1,
 		Slotbar:        []byte{},
 		Coordinate:     coordinate.Point,
-		AidTime:        7200,
+		AidTime:        120,
+		HeadStyle:      cch.headstyle,
+		FaceStyle:      cch.facestyle,
 	}
 
 	err = character.Create()
@@ -110,7 +114,17 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 	}
 
 	character.AddItem(&database.InventorySlot{ItemID: 17200576, Quantity: 1}, -1, false)
-	character.AddItem(&database.InventorySlot{ItemID: 17500335, Quantity: 1}, -1, false)
+	if character.Type == 50 {
+		buff := database.Buff{ID: int(277),
+			CharacterID: character.ID, Name: "Great Tiger Statue", DEFRate: 5, ArtsDEFRate: 5, ATKRate: 4, ArtsATKRate: 4, StartedAt: character.Epoch, Duration: 99946, CanExpire: false}
+		err = buff.Create()
+	}
+	if character.Type == 51 {
+		buff := database.Buff{ID: int(280),
+			CharacterID: character.ID, Name: "Youngblood Tiger Statue", DEFRate: 5, ArtsDEFRate: 5, ATKRate: 4, ArtsATKRate: 4, StartedAt: character.Epoch, Duration: 99946, CanExpire: false}
+		err = buff.Create()
+
+	}
 	character.Update()
 
 	stat := &database.Stat{}
@@ -154,4 +168,5 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 	logger.Log(logging.ACTION_CREATE_CHARACTER, character.ID, "Character created", s.User.ID)
 	resp.Concat(data)
 	return resp, nil
+
 }

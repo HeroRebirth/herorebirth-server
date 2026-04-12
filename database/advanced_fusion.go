@@ -60,3 +60,21 @@ func getAdvancedFusions() error {
 
 	return nil
 }
+
+func RefreshAdvancedFusions() error {
+	var fusions []*Fusion
+	query := `select * from data.advanced_fusion`
+
+	if _, err := db.Select(&fusions, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getProductions: %s", err.Error())
+	}
+
+	for _, f := range fusions {
+		Fusions[f.Item1] = f
+	}
+
+	return nil
+}

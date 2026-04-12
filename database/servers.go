@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SERVER_COUNT = 4
+	SERVER_COUNT = 100
 )
 
 var (
@@ -17,9 +17,11 @@ var (
 )
 
 type Server struct {
-	ID       int    `db:"id" json:"id"`
-	Name     string `db:"name" json:"name"`
-	MaxUsers int    `db:"max_users" json:"max_users"`
+	ID          int    `db:"id" json:"id"`
+	Name        string `db:"name" json:"name"`
+	MaxUsers    int    `db:"max_users" json:"max_users"`
+	IsPVPServer bool   `db:"ispvpserver" json:"ispvpserver"`
+	CanLoseEXP  bool   `db:"canloseexp" json:"canloseexp"`
 }
 
 type ServerItem struct {

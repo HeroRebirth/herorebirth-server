@@ -1,7 +1,8 @@
 package server
 
 import (
-	"github.com/syntaxgame/dragon-legend/database"
+	"hero-emulator/database"
+
 	cmap "github.com/orcaman/concurrent-map"
 	"github.com/thoas/go-funk"
 )
@@ -13,6 +14,7 @@ const (
 	GAL_USER
 	GM_USER
 	HGM_USER
+	VIP_USER
 )
 
 var (

@@ -38,6 +38,7 @@ type Buff struct {
 	StartedAt       int64   `db:"started_at" json:"started_at"`
 	Duration        int64   `db:"duration" json:"duration"`
 	BagExpansion    bool    `db:"bag_expansion" json:"bag_expansion"`
+	CanExpire       bool    `db:"canexpire" json:"canexpire"`
 }
 
 func (b *Buff) Create() error {

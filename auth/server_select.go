@@ -3,10 +3,10 @@ package auth
 import (
 	"fmt"
 
-	"github.com/syntaxgame/dragon-legend/config"
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/config"
+	"hero-emulator/database"
+	"hero-emulator/logging"
+	"hero-emulator/utils"
 )
 
 type SelectServerHandler struct {

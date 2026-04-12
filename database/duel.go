@@ -1,6 +1,6 @@
 package database
 
-import "github.com/syntaxgame/dragon-legend/utils"
+import "hero-emulator/utils"
 
 type Duel struct {
 	EnemyID    int

@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/nats"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 	"gopkg.in/guregu/null.v3"
 )
@@ -22,24 +23,26 @@ var (
 )
 
 type InventorySlot struct {
-	ID          int             `db:"id"`
-	UserID      null.String     `db:"user_id"`
-	CharacterID null.Int        `db:"character_id"`
-	ItemID      int64           `db:"item_id"`
-	SlotID      int16           `db:"slot_id"`
-	Quantity    uint            `db:"quantity"`
-	Plus        uint8           `db:"plus"`
-	UpgradeArr  string          `db:"upgrades"`
-	SocketCount int8            `db:"socket_count"`
-	SocketArr   string          `db:"sockets"`
-	Activated   bool            `db:"activated"`
-	InUse       bool            `db:"in_use"`
-	PetInfo     json.RawMessage `db:"pet_info"`
-	UpdatedAt   null.Time       `db:"updated_at"`
-	Consignment bool            `db:"consignment"`
-
-	Pet *PetSlot    `db:"-" json:"-"`
-	RFU interface{} `db:"-" json:"-"`
+	ID            int             `db:"id"`
+	UserID        null.String     `db:"user_id"`
+	CharacterID   null.Int        `db:"character_id"`
+	ItemID        int64           `db:"item_id"`
+	SlotID        int16           `db:"slot_id"`
+	Quantity      uint            `db:"quantity"`
+	Plus          uint8           `db:"plus"`
+	UpgradeArr    string          `db:"upgrades"`
+	SocketCount   int8            `db:"socket_count"`
+	SocketArr     string          `db:"sockets"`
+	Activated     bool            `db:"activated"`
+	InUse         bool            `db:"in_use"`
+	PetInfo       json.RawMessage `db:"pet_info"`
+	UpdatedAt     null.Time       `db:"updated_at"`
+	Consignment   bool            `db:"consignment"`
+	Appearance    int64           `db:"appearance"`
+	ItemType      int16           `db:"item_type"`
+	JudgementStat int64           `db:"judgement_stat"`
+	Pet           *PetSlot        `db:"-" json:"-"`
+	RFU           interface{}     `db:"-" json:"-"`
 }
 
 type PetSlot struct {
@@ -68,6 +71,7 @@ type PetSlot struct {
 	MovementToken  int64          `db:"-" json:"-"`
 	PseudoID       int            `db:"-" json:"-"`
 	RefreshStats   bool           `db:"-" json:"-"`
+	PetCombatMode  int16          `db:"-" json:"-"`
 	Target         int            `db:"-" json:"-"`
 	TargetLocation utils.Location `db:"-" json:"-"`
 }
@@ -298,7 +302,13 @@ func (slot *InventorySlot) Upgrade(slotID int16, codes ...byte) []byte {
 	resp.Insert(slot.GetUpgrades(), 19)                            // item upgrades
 	resp[34] = byte(slot.SocketCount)                              // socket count
 	resp.Insert(slot.GetSockets(), 35)                             // item sockets
-
+	c := 35 + 15
+	if slot.ItemType != 0 {
+		resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+		if slot.ItemType == 2 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+		}
+	}
 	err := slot.Update()
 	if err != nil {
 		return nil
@@ -318,7 +328,13 @@ func (slot *InventorySlot) CreateSocket(slotID int16, count int8) []byte {
 	resp.Insert(slot.GetUpgrades(), 18)                            // item upgrades
 	resp[33] = byte(slot.SocketCount)                              // socket count
 	resp.Insert(slot.GetSockets(), 34)                             // sockets
-
+	c := 34 + 15
+	if slot.ItemType != 0 {
+		resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+		if slot.ItemType == 2 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+		}
+	}
 	return resp
 }
 
@@ -334,7 +350,13 @@ func (slot *InventorySlot) UpgradeSocket(slotID int16, codes []byte) []byte {
 	resp.Insert(slot.GetUpgrades(), 18)                            // item upgrades
 	resp[33] = byte(slot.SocketCount)                              // socket count
 	resp.Insert(slot.GetSockets(), 34)                             // sockets
-
+	c := 34 + 15
+	if slot.ItemType != 0 {
+		resp.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), c-6)
+		if slot.ItemType == 2 {
+			resp.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), c-5)
+		}
+	}
 	err := slot.Update()
 	if err != nil {
 		return nil
@@ -420,9 +442,15 @@ func (slot *InventorySlot) GetData(slotID int16) []byte {
 				for j := 0; j < 15; j++ {
 					r[j+32] = socks[j] // socket features
 				}
+				r.Overwrite(utils.IntToBytes(uint64(slot.ItemType), 1, true), 41)
+				r.Overwrite(utils.IntToBytes(uint64(slot.JudgementStat), 4, true), 42)
 			}
 		}
-
+		if slot.Appearance != 0 && slot.Plus <= 0 {
+			r.Overwrite(utils.IntToBytes(uint64(slot.Appearance), 4, true), 16)
+		} else if slot.Appearance != 0 && slot.Plus > 0 {
+			r.Overwrite(utils.IntToBytes(uint64(slot.Appearance), 4, true), 46)
+		}
 		resp.Concat(r)
 		resp.Concat(r2)
 
@@ -610,6 +638,33 @@ func (pet *PetSlot) Move(targetLocation utils.Location, runningMode byte) []byte
 	return resp
 }
 
+func (pet *PetSlot) PlayerAttack(owner *Character) []byte {
+	resp := MOB_ATTACK
+	mob := FindCharacterByPseudoID(owner.Socket.User.ConnectedServer, uint16(pet.Target))
+
+	rawDamage := int(utils.RandInt(int64(pet.MinATK), int64(pet.MaxATK)))
+	damage := int(math.Max(float64(rawDamage-mob.Socket.Stats.DEF), 3))
+
+	reqAcc := float64(int(mob.Level)-int(pet.Level)) * 10
+	if utils.RandInt(0, 1000) < int64(reqAcc) {
+		damage = 0
+	}
+
+	resp.Insert(utils.IntToBytes(uint64(pet.PseudoID), 2, true), 6) // pet pseudo id
+	//resp.Insert([]byte{0}, 8)
+	resp.Insert(utils.IntToBytes(uint64(mob.PseudoID), 2, true), 8) // target pseudo id
+
+	resp[11] = 2
+	if damage > 0 {
+		resp[12] = 1 // damage sound
+		pet.AddExp(owner, 0)
+		time.AfterFunc(time.Second/2, func() {
+			owner.DealDamageToPlayer(mob, damage)
+		})
+	}
+
+	return resp
+}
 func (pet *PetSlot) Attack(owner *Character) []byte {
 
 	resp := MOB_ATTACK
@@ -645,7 +700,7 @@ func (pet *PetSlot) Attack(owner *Character) []byte {
 		resp[12] = 1 // damage sound
 	}
 
-	pet.AddExp(owner)
+	pet.AddExp(owner, 0)
 	time.AfterFunc(time.Second/2, func() {
 		owner.DealDamage(mob, damage)
 	})
@@ -732,8 +787,7 @@ func (pet *PetSlot) CastSkill(owner *Character) []byte {
 			if utils.RandInt(0, 1000) < int64(reqAcc) {
 				damage = 0
 			}
-
-			pet.AddExp(owner)
+			pet.AddExp(owner, 0)
 			owner.DealDamage(target, damage)
 		}
 	})
@@ -742,7 +796,7 @@ func (pet *PetSlot) CastSkill(owner *Character) []byte {
 	return resp
 }
 
-func (pet *PetSlot) AddExp(owner *Character) {
+func (pet *PetSlot) AddExp(owner *Character, amount uint64) {
 
 	slots, err := owner.InventorySlots()
 	if err != nil {
@@ -757,19 +811,22 @@ func (pet *PetSlot) AddExp(owner *Character) {
 		return
 	}
 
-	targetExps := []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt}
-
-	pet.Exp++
+	targetExps := []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt, petExpInfo.ReqExpDivEvo1, petExpInfo.ReqExpDivEvo2, petExpInfo.ReqExpDivEvo3}
+	if amount <= 0 {
+		pet.Exp += 2
+	} else {
+		pet.Exp += amount
+	}
 	inform := true
 
 	for pet.Exp >= uint64(targetExps[petInfo.Evolution-1]) {
 		if pet.Level < 100 {
 			pet.Level++
 			petExpInfo = PetExps[int16(pet.Level)]
-			targetExps = []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt}
+			targetExps = []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt, petExpInfo.ReqExpDivEvo1, petExpInfo.ReqExpDivEvo2, petExpInfo.ReqExpDivEvo3}
 
 		} else {
-			targetExps = []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt}
+			targetExps = []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt, petExpInfo.ReqExpDivEvo1, petExpInfo.ReqExpDivEvo2, petExpInfo.ReqExpDivEvo3}
 			pet.Exp = uint64(targetExps[petInfo.Evolution-1])
 			inform = false
 			break
@@ -777,7 +834,7 @@ func (pet *PetSlot) AddExp(owner *Character) {
 	}
 
 	petExpInfo = PetExps[int16(pet.Level)]
-	targetExps = []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt}
+	targetExps = []int{petExpInfo.ReqExpEvo1, petExpInfo.ReqExpEvo2, petExpInfo.ReqExpEvo3, petExpInfo.ReqExpHt, petExpInfo.ReqExpDivEvo1, petExpInfo.ReqExpDivEvo2, petExpInfo.ReqExpDivEvo3}
 
 	for int16(pet.Level) >= petInfo.TargetLevel { // evolution
 		if petInfo.EvolvedID == 0 {

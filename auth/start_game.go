@@ -1,16 +1,18 @@
 package auth
 
 import (
+	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	dbg "runtime/debug"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/npc"
-	"github.com/syntaxgame/dragon-legend/player"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/logging"
+	"hero-emulator/npc"
+	"hero-emulator/player"
+	"hero-emulator/utils"
 
 	"github.com/thoas/go-funk"
 )
@@ -89,9 +91,24 @@ func (csh *StartGameHandler) startGame(s *database.Socket) ([]byte, error) {
 	if trade != nil {
 		trade.Delete()
 	}
+	if s.Character.IsDungeon || s.Character.Map == 229 || s.Character.Map == 120 {
+		s.Character.IsDungeon = false
+		s.Character.DungeonLevel = 1
+		gomap, _ := s.Character.ChangeMap(1, nil)
+		s.Conn.Write(gomap)
+	}
+	if s.Character.Map == 255 {
+		gomap, _ := s.Character.ChangeMap(1, nil)
+		s.Conn.Write(gomap)
+	}
 
+	if s.Character.Map == 230 {
+		gomap, _ := s.Character.ChangeMap(1, nil)
+		s.Conn.Write(gomap)
+	}
 	s.Character.HasLot = false
 	s.Character.IsOnline = true
+	s.Character.IsinWar = false
 	s.Character.Respawning = false
 	s.Character.SetInventorySlots(nil)
 	s.Character.OnSight.Drops = make(map[int]interface{})
@@ -169,13 +186,15 @@ func (csh *StartGameHandler) startGame(s *database.Socket) ([]byte, error) {
 	s.Write(inventory)
 	s.Write(s.Character.GetPetStats())
 	s.Write(mapData)
-
+	honorresp := database.CHANGE_RANK
+	honorresp.Insert(utils.IntToBytes(uint64(s.Character.PseudoID), 2, true), 6)
+	honorresp.Insert(utils.IntToBytes(uint64(s.Character.HonorRank), 4, true), 8)
+	s.Write(honorresp)
 	spawnData, err := s.Character.SpawnCharacter()
 	if err != nil {
 		return nil, err
 	}
 	s.Write(spawnData)
-
 	gsh := &player.GetStatsHandler{}
 	statData, err := gsh.Handle(s)
 	if err != nil {
@@ -232,7 +251,6 @@ func (csh *StartGameHandler) startGame(s *database.Socket) ([]byte, error) {
 	})
 
 	go s.Character.ActivityStatus(30)
-
 	logger.Log(logging.ACTION_START_GAME, s.Character.ID, "Started the game", s.User.ID)
 	return nil, nil
 }
@@ -317,12 +335,20 @@ func explorePlayers(s *database.Socket) {
 	}
 }
 
+func Tester(s []uint16, e uint16) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
 func exploreMobs(s *database.Socket) {
 	c := s.Character
 	if c == nil {
 		return
 	}
-
 	ids, err := c.GetNearbyAIIDs()
 	if err != nil {
 		log.Println(err)
@@ -331,7 +357,12 @@ func exploreMobs(s *database.Socket) {
 
 	for _, id := range ids {
 		mob := database.AIs[id]
-
+		if c.IsinWar {
+			isStone := Tester(database.WarStonesIDs, mob.PseudoID)
+			if isStone {
+				delete(c.OnSight.Mobs, id)
+			}
+		}
 		c.OnSight.MobMutex.RLock()
 		_, ok := c.OnSight.Mobs[id]
 		c.OnSight.MobMutex.RUnlock()
@@ -359,16 +390,110 @@ func exploreMobs(s *database.Socket) {
 			coordinate := database.ConvertPointToLocation(mob.Coordinate)
 
 			r := database.MOB_APPEARED
+			if (mob.Faction != 0 && mob.Faction == c.Faction) || mob.Faction == 3 { //faction 3 = neutral
+				r.Overwrite(utils.IntToBytes(uint64(1), 4, true), 6)
+				npc.Level = 1
+			} else {
+				npc2 := database.NPCs[int(npcID)]
+				npc.Level = npc2.Level
+				r.Overwrite([]byte{0xFF, 0xFF, 0xFF, 0xFF}, 6)
+			}
 			r.Insert(utils.IntToBytes(uint64(mob.PseudoID), 2, true), 6) // mob pseudo id
 			r.Insert(utils.IntToBytes(npcID, 4, true), 8)                // mob npc id
 			r.Insert(utils.IntToBytes(uint64(npc.Level), 4, true), 12)   // mob level
-			r.Insert(utils.IntToBytes(uint64(mob.HP), 8, true), 30)      // mob hp
-			r.Insert(utils.IntToBytes(uint64(npc.MaxHp), 8, true), 38)   // mob max hp
-			r.Insert(utils.FloatToBytes(coordinate.X, 4, true), 48)      // coordinate-x
-			r.Insert(utils.FloatToBytes(coordinate.Y, 4, true), 52)      // coordinate-y
-			r.Insert(utils.FloatToBytes(coordinate.X, 4, true), 60)      // coordinate-x
-			r.Insert(utils.FloatToBytes(coordinate.Y, 4, true), 64)      // coordinate-y
-
+			index := 20
+			r.Insert(utils.IntToBytes(uint64(len(npc.Name)), 1, true), index)
+			index++
+			//npcCurrentHPHalf := (mob.HP / 2) / 10
+			npcMaxHPHalf := (npc.MaxHp / 2) / 10
+			r.Insert([]byte(npc.Name), index) // mob name
+			index += len(npc.Name)
+			r.Insert(utils.IntToBytes(uint64(mob.HP), 4, true), index) // mob hp
+			index += 4
+			r.Insert(utils.IntToBytes(uint64(npcMaxHPHalf), 4, true), index) // mob half hp
+			index += 4
+			r.Insert(utils.IntToBytes(uint64(npc.MaxHp), 4, true), index) // mob max hp
+			index += 4
+			r.Insert(utils.IntToBytes(uint64(npcMaxHPHalf), 4, true), index) // mob half max hp
+			index += 6
+			r.Insert(utils.FloatToBytes(coordinate.X, 4, true), index) // coordinate-x
+			index += 4
+			r.Insert(utils.FloatToBytes(coordinate.Y, 4, true), index) // coordinate-y
+			index += 8
+			r.Insert(utils.FloatToBytes(coordinate.X, 4, true), index) // coordinate-x
+			index += 4
+			r.Insert(utils.FloatToBytes(coordinate.Y, 4, true), index) // coordinate-y
+			index += 4
+			r.SetLength(int16(index + 16))
+			//LOADMOBSBUFFS
+			buffs, err := database.FindBuffsByAiPseudoID(mob.PseudoID)
+			if err == nil && len(buffs) > 0 {
+				index := 5
+				br := database.DEAL_BUFF_AI
+				br.Insert(utils.IntToBytes(uint64(mob.PseudoID), 2, true), index) // ai pseudo id
+				index += 2
+				br.Insert(utils.IntToBytes(uint64(mob.PseudoID), 2, true), index) // ai pseudo id
+				index += 2
+				br.Insert(utils.IntToBytes(uint64(mob.HP), 4, true), index) // ai current hp
+				index += 4
+				br.Insert(utils.IntToBytes(uint64(mob.CHI), 4, true), index)    // ai current chi
+				br.Overwrite(utils.IntToBytes(uint64(len(buffs)), 1, true), 21) //BUFF ID
+				index = 22
+				count := 0
+				for _, buff := range buffs {
+					br.Insert(utils.IntToBytes(uint64(buff.ID), 4, true), index) //BUFF ID
+					index += 4
+					if count < len(buffs)-1 {
+						br.Insert(utils.IntToBytes(uint64(0), 2, true), index) //BUFF ID
+						index += 2
+					}
+					count++
+				}
+				index += 4
+				br.SetLength(int16(index))
+				r.Concat(br)
+			} else if err != nil && len(buffs) != 0 {
+				fmt.Println(fmt.Sprintf("LoadBuffsToMob: %s", err.Error()))
+			}
+			if c.IsinWar {
+				isStone := Tester(database.WarStonesIDs, mob.PseudoID)
+				if isStone {
+					if c.Faction == 1 {
+						if ok, _ := utils.Contains(database.WarStones[int(mob.PseudoID)].NearbyZuhangV, c.ID); !ok {
+							database.WarStones[int(mob.PseudoID)].NearbyZuhangV = append(database.WarStones[int(mob.PseudoID)].NearbyZuhangV, c.ID)
+						}
+					} else {
+						if ok, _ := utils.Contains(database.WarStones[int(mob.PseudoID)].NearbyShaoV, c.ID); !ok {
+							database.WarStones[int(mob.PseudoID)].NearbyShaoV = append(database.WarStones[int(mob.PseudoID)].NearbyShaoV, c.ID)
+						}
+					}
+					if c.Socket.Stats.HP <= 0 {
+						if c.Faction == 1 {
+							if ok, _ := utils.Contains(database.WarStones[int(mob.PseudoID)].NearbyZuhangV, c.ID); ok {
+								database.WarStones[int(mob.PseudoID)].RemoveZuhang(c.ID)
+							}
+						} else {
+							if ok, _ := utils.Contains(database.WarStones[int(mob.PseudoID)].NearbyShaoV, c.ID); ok {
+								database.WarStones[int(mob.PseudoID)].RemoveShao(c.ID)
+							}
+						}
+					}
+					resp := database.STONE_APPEARED
+					resp.Insert(utils.IntToBytes(uint64(mob.PseudoID), 2, true), 6) // mob pseudo id
+					resp.Insert(utils.IntToBytes(npcID, 4, true), 8)                // mob npc id
+					resp.Insert(utils.IntToBytes(uint64(npc.Level), 4, true), 12)   // mob level
+					resp.Insert(utils.IntToBytes(uint64(mob.HP), 8, true), 33)      // mob hp
+					resp.Insert(utils.IntToBytes(uint64(npc.MaxHp), 8, true), 41)   // mob max hp
+					resp.Insert(utils.FloatToBytes(coordinate.X, 4, true), 51)      // coordinate-x
+					resp.Insert(utils.FloatToBytes(coordinate.Y, 4, true), 55)      // coordinate-y
+					resp.Insert(utils.FloatToBytes(coordinate.X, 4, true), 63)      // coordinate-x
+					resp.Insert(utils.FloatToBytes(coordinate.Y, 4, true), 67)      // coordinate-y
+					resp.Overwrite(utils.IntToBytes(uint64(database.WarStones[int(mob.PseudoID)].ConquereValue), 1, false), 37)
+					resp.Overwrite([]byte{0xc8}, 45)
+					s.Conn.Write(resp)
+					continue
+				}
+			}
 			s.Conn.Write(r)
 			//resp.Concat(r)
 		}
@@ -460,10 +585,12 @@ func explorePets(s *database.Socket) {
 			r.Insert(utils.IntToBytes(uint64(pet.PseudoID), 2, true), 6)   // pet pseudo id
 			r.Insert(utils.IntToBytes(uint64(petSlot.ItemID), 4, true), 8) // pet npc id
 			r.Insert(utils.IntToBytes(uint64(pet.Level), 4, true), 12)     // pet level
-			r.Overwrite(utils.IntToBytes(1, 4, true), 16)                  //
-			r[20] = byte(len(pet.Name))                                    // pet name length
-			r.Insert([]byte(pet.Name), 21)                                 // pet name
-
+			r.Overwrite(utils.IntToBytes(1, 4, true), 16)                  //Pets to neutral
+			r.Insert([]byte{0x09, 0x57, 0x69, 0x6C, 0x64, 0x20, 0x42, 0x6F, 0x61, 0x72}, 20)
+			//r.Insert(utils.IntToBytes(uint64(len(pet.Name)), 1, true), 20)
+			//	index++
+			r[20] = byte(len(pet.Name))    // pet name length
+			r.Insert([]byte(pet.Name), 21) // pet name
 			index := len(pet.Name) + 21
 			r.Insert(utils.IntToBytes(uint64(pet.HP), 4, true), index)        // pet hp
 			r.Insert(utils.IntToBytes(uint64(pet.CHI), 4, true), index+4)     // pet chi
@@ -515,7 +642,6 @@ func explorePets(s *database.Socket) {
 		return
 	}
 }
-
 func exploreNPCs(s *database.Socket) {
 	c := s.Character
 	if c == nil {
@@ -598,6 +724,16 @@ func exploreNPCs(s *database.Socket) {
 	}
 }
 
+func shareLoot(ids []int, s *database.Socket) {
+	for _, id := range ids {
+		r := database.DROP_DISAPPEARED
+		r.Insert(utils.IntToBytes(uint64(id), 2, true), 6) //drop id
+		s.Conn.Write(r)
+	}
+}
+
+var doOnce sync.Once
+
 func exploreDrops(s *database.Socket) {
 	c := s.Character
 	if c == nil {
@@ -609,10 +745,8 @@ func exploreDrops(s *database.Socket) {
 		log.Println(err)
 		return
 	}
-
 	func() {
 		for _, id := range ids {
-
 			drop := database.GetDrop(s.User.ConnectedServer, c.Map, uint16(id))
 			if drop == nil {
 				continue
@@ -621,17 +755,17 @@ func exploreDrops(s *database.Socket) {
 			c.OnSight.DropsMutex.RLock()
 			_, ok := c.OnSight.Drops[id]
 			c.OnSight.DropsMutex.RUnlock()
-
+			needRefresh := ok
 			claimer := drop.Claimer
 			if claimer == nil {
 				claimer = s.Character
+				needRefresh = false
 			}
 
-			if !ok {
+			if !needRefresh {
 				c.OnSight.DropsMutex.Lock()
 				c.OnSight.Drops[id] = struct{}{}
 				c.OnSight.DropsMutex.Unlock()
-
 				r := database.ITEM_DROPPED
 				r.Insert(utils.IntToBytes(uint64(id), 2, true), 6) // drop id
 
@@ -647,10 +781,11 @@ func exploreDrops(s *database.Socket) {
 					r.SetLength(0x42)
 				} else {
 					r[27] = 0xA1
-					r.Insert(utils.IntToBytes(uint64(claimer.PseudoID), 2, true), 36) // claimer id
-					r.SetLength(0x24)
+					r.Insert(drop.Item.GetUpgrades(), 32)                             // item upgrades
+					r.Insert([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 47) // item sockets
+					r.Insert(utils.IntToBytes(uint64(claimer.PseudoID), 2, true), 66) // claimer id
+					r.SetLength(0x42)
 				}
-
 				s.Conn.Write(r)
 			}
 		}

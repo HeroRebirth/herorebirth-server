@@ -5,11 +5,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/nats"
-	"github.com/syntaxgame/dragon-legend/server"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/messaging"
+	"hero-emulator/nats"
+	"hero-emulator/server"
+	"hero-emulator/utils"
 )
 
 type (
@@ -248,7 +248,12 @@ func (h *DealDamageHandler) Handle(s *database.Socket, data []byte) ([]byte, err
 
 		dmg := target.Damage
 
-		go c.DealDamage(ai, dmg)
+		if target.SkillId != 0 {
+			c.DealInfection(ai, nil, target.SkillId)
+			go c.DealDamage(ai, dmg)
+		} else {
+			go c.DealDamage(ai, dmg)
+		}
 		dealt[ai.ID] = struct{}{}
 	}
 
@@ -326,8 +331,45 @@ func DealDamageToPlayer(s *database.Socket, enemy *database.Character, dmg int) 
 		info := fmt.Sprintf("[%s] has defeated [%s]", c.Name, enemy.Name)
 		r := messaging.InfoMessage(info)
 
+		servers, _ := database.GetServers()
+		if servers[int16(c.Socket.User.ConnectedServer)-1].IsPVPServer && servers[int16(c.Socket.User.ConnectedServer)-1].CanLoseEXP && servers[int16(enemy.Socket.User.ConnectedServer)-1].CanLoseEXP && !c.IsinWar && !enemy.IsinWar {
+			randInt := utils.RandInt(1, 3)
+			exp, _ := enemy.LosePlayerExp(int(randInt))
+			different := int(enemy.Level + 20)
+			if c.Level <= different {
+				targetExp := database.EXPs[int16(c.Level)].Exp
+				twentyPercent := (targetExp - c.Exp)
+				if exp > targetExp || exp > twentyPercent {
+					exp = int64(float64(twentyPercent) * 0.2)
+				}
+				resp, levelUp := c.AddExp(exp)
+				if levelUp {
+					statData, err := c.GetStats()
+					if err == nil {
+						c.Socket.Write(statData)
+					}
+				}
+				c.Socket.Write(resp)
+			}
+		}
 		p := nats.CastPacket{CastNear: true, CharacterID: c.ID, Data: r, Type: nats.PVP_FINISHED}
 		p.Cast()
+		if database.WarStarted && c.IsinWar && enemy.IsinWar {
+			c.WarKillCount++
+			if c.Faction == 1 {
+				database.ShaoPoints -= 5
+			} else {
+				database.OrderPoints -= 5
+			}
+		}
+		if enemy.Map == 255 && database.IsFactionWarStarted() {
+			if enemy.Faction == 1 && c.Faction == 2 {
+				database.AddPointsToFactionWarFaction(15, 2)
+			}
+			if enemy.Faction == 2 && c.Faction == 1 {
+				database.AddPointsToFactionWarFaction(15, 1)
+			}
+		}
 	}
 }
 

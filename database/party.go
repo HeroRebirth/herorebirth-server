@@ -3,7 +3,8 @@ package database
 import (
 	"sync"
 
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/utils"
+
 	"github.com/thoas/go-funk"
 )
 
@@ -103,7 +104,6 @@ func GetPartyMemberData(c *Character) []byte {
 	resp[index] = byte(c.Type) // character type
 	index += 2
 	resp[index] = byte(user.ConnectedServer - 1) // connected server id
-
 	return resp
 }
 

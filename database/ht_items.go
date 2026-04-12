@@ -55,3 +55,21 @@ func getHTItems() error {
 
 	return nil
 }
+
+func RefreshHTItems() error {
+	var htitems []*HtItem
+	query := `select * from data.ht_shop`
+
+	if _, err := db.Select(&htitems, query); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("getHTItems: %s", err.Error())
+	}
+
+	for _, h := range htitems {
+		HTItems[h.ID] = h
+	}
+
+	return nil
+}

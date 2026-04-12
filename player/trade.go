@@ -5,11 +5,12 @@ import (
 	"net"
 	"time"
 
-	"github.com/syntaxgame/dragon-legend/database"
-	"github.com/syntaxgame/dragon-legend/logging"
-	"github.com/syntaxgame/dragon-legend/messaging"
-	"github.com/syntaxgame/dragon-legend/server"
-	"github.com/syntaxgame/dragon-legend/utils"
+	"hero-emulator/database"
+	"hero-emulator/logging"
+	"hero-emulator/messaging"
+	"hero-emulator/server"
+	"hero-emulator/utils"
+
 	"github.com/google/uuid"
 	"gopkg.in/guregu/null.v3"
 )
@@ -190,6 +191,13 @@ func (h *AddTradeItemHandler) Handle(s *database.Socket, data []byte) ([]byte, e
 		resp.Insert(item.GetUpgrades(), 21)                               // item upgrades
 		resp[36] = byte(item.SocketCount)                                 // socket count
 		resp.Insert(item.GetSockets(), 37)                                // item sockets
+		c := 37 + 15
+		if item.ItemType != 0 {
+			resp.Overwrite(utils.IntToBytes(uint64(item.ItemType), 1, true), c-6)
+			if item.ItemType == 2 {
+				resp.Overwrite(utils.IntToBytes(uint64(item.JudgementStat), 4, true), c-5)
+			}
+		}
 	}
 
 	if snd {
@@ -407,6 +415,13 @@ func (h *AcceptTradeHandler) Handle(s *database.Socket, data []byte) ([]byte, er
 				index++
 				r.Insert(item.GetSockets(), index) // item upgrades
 				index += 15
+
+				if item.ItemType != 0 {
+					resp.Overwrite(utils.IntToBytes(uint64(item.ItemType), 1, true), index-6)
+					if item.ItemType == 2 {
+						resp.Overwrite(utils.IntToBytes(uint64(item.JudgementStat), 4, true), index-5)
+					}
+				}
 				r.Insert([]byte{0x00, 0x00, 0x00}, index)
 				index += 3
 				length += 44
@@ -474,6 +489,12 @@ func (h *AcceptTradeHandler) Handle(s *database.Socket, data []byte) ([]byte, er
 				index++
 				r.Insert(item.GetSockets(), index) // item upgrades
 				index += 15
+				if item.ItemType != 0 {
+					resp.Overwrite(utils.IntToBytes(uint64(item.ItemType), 1, true), index-6)
+					if item.ItemType == 2 {
+						resp.Overwrite(utils.IntToBytes(uint64(item.JudgementStat), 4, true), index-5)
+					}
+				}
 				r.Insert([]byte{0x00, 0x00, 0x00}, index)
 				index += 3
 				length += 44
