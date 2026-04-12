@@ -613,10 +613,8 @@ func DeleteCharacterFromCache(id int) {
 }
 
 func (c *Character) GetNearbyCharacters() ([]*Character, error) {
-
-	var (
-		distance = float64(50)
-	)
+	const distance = 50.0
+	const distanceSquared = distance * distance
 
 	u, err := FindUserByID(c.UserID)
 	if err != nil {
@@ -624,23 +622,53 @@ func (c *Character) GetNearbyCharacters() ([]*Character, error) {
 	}
 
 	myCoordinate := ConvertPointToLocation(c.Coordinate)
-	characterMutex.RLock()
-	allChars := funk.Values(characters)
-	characterMutex.RUnlock()
-	characters := funk.Filter(allChars, func(character *Character) bool {
+	result := make([]*Character, 0, 32)
 
-		user, err := FindUserByID(character.UserID)
-		if err != nil || user == nil {
-			return false
+	characterMutex.RLock()
+	defer characterMutex.RUnlock()
+
+	for _, character := range characters {
+		if character == nil {
+			continue
+		}
+		if !character.IsOnline {
+			continue
+		}
+		if character.Map != c.Map {
+			continue
+		}
+		if character.Invisible && !c.DetectionMode {
+			continue
+		}
+		if character.ID == c.ID {
+			continue
+		}
+
+		var user *User
+		if character.Socket != nil && character.Socket.User != nil {
+			user = character.Socket.User
+		} else {
+			user, err = FindUserByID(character.UserID)
+			if err != nil || user == nil {
+				continue
+			}
+		}
+
+		if user.ConnectedServer != u.ConnectedServer {
+			continue
 		}
 
 		characterCoordinate := ConvertPointToLocation(character.Coordinate)
+		dx := characterCoordinate.X - myCoordinate.X
+		dy := characterCoordinate.Y - myCoordinate.Y
+		distSq := dx*dx + dy*dy
 
-		return character.IsOnline && user.ConnectedServer == u.ConnectedServer && character.Map == c.Map &&
-			(!character.Invisible || c.DetectionMode) && utils.CalculateDistance(characterCoordinate, myCoordinate) <= distance
-	}).([]*Character)
+		if distSq <= distanceSquared {
+			result = append(result, character)
+		}
+	}
 
-	return characters, nil
+	return result, nil
 }
 
 func (c *Character) GetNearbyAIIDs() ([]int, error) {
