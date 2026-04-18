@@ -76,9 +76,9 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 		return messaging.SystemMessage(messaging.EMPTY_FACTION), nil
 	}
 
-	coordinate := database.SavePoints[70]
-	if err != nil {
-		return nil, err
+	coordinate := database.SavePoints[1]
+	if coordinate == nil {
+		coordinate = &database.SavePoint{Point: "(100.0,100.0)"}
 	}
 
 	character := &database.Character{
@@ -93,7 +93,7 @@ func (cch *CharacterCreationHandler) createCharacter(s *database.Socket) ([]byte
 		IsOnline:       false,
 		IsActive:       false,
 		Gold:           210000,
-		Map:            70,
+		Map:            1,
 		Exp:            0,
 		HTVisibility:   0,
 		WeaponSlot:     3,
