@@ -6626,7 +6626,7 @@ func (c *Character) DealDamage(ai *AI, dmg int) {
 				_, slot, _ := c.AddItem(reward, -1, true)
 				resp.Concat(slots[slot].GetData(slot))
 				s.Conn.Write(resp)
-				s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("You kill the Wyrm, now you can make the transformation.")))
+				s.Conn.Write(messaging.InfoMessage("You kill the Wyrm, now you can make the transformation."))
 			}
 		}
 		//60006	Underground(EXP)

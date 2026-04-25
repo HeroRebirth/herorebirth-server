@@ -34,7 +34,7 @@ func CheckALlPlayersReady() {
 				if !char.IsAcceptedWar {
 					ActiveWars[int(1)].RemoveLobbyShao(char)
 					delete(LobbyCharacters, char.ID)
-					char.Socket.Write(messaging.InfoMessage(fmt.Sprintf("You missed the ready check. You kicked from the lobby")))
+					char.Socket.Write(messaging.InfoMessage("You missed the ready check. You kicked from the lobby"))
 				}
 				char.IsAcceptedWar = false
 			}
@@ -42,7 +42,7 @@ func CheckALlPlayersReady() {
 				if !char.IsAcceptedWar {
 					ActiveWars[int(1)].RemoveLobbyZuhang(char)
 					delete(LobbyCharacters, char.ID)
-					char.Socket.Write(messaging.InfoMessage(fmt.Sprintf("You missed the ready check. You kicked from the lobby")))
+					char.Socket.Write(messaging.InfoMessage("You missed the ready check. You kicked from the lobby"))
 				}
 				char.IsAcceptedWar = false
 			}

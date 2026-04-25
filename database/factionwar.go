@@ -167,7 +167,7 @@ func AddMemberToFactionWar(char *Character) {
 		ip2x := ip2[0]
 
 		if ip1x == ip2x && ip1x != "190.77.242.46" {
-			char.Socket.Write(messaging.InfoMessage(fmt.Sprintf("You cannot enter with more than one character!")))
+			char.Socket.Write(messaging.InfoMessage("You cannot enter with more than one character!"))
 			return
 		}
 	}
@@ -187,7 +187,7 @@ func AddMemberToFactionWar(char *Character) {
 		ip2x := ip2[0]
 
 		if ip1x == ip2x && ip1x != "190.77.242.46" {
-			char.Socket.Write(messaging.InfoMessage(fmt.Sprintf("You cannot enter with more than one character!")))
+			char.Socket.Write(messaging.InfoMessage("You cannot enter with more than one character!"))
 			return
 		}
 
@@ -206,7 +206,7 @@ func finishFactionWar() {
 	isFactionWarEntranceActive = false
 
 	if zhuangFactionWarPoints > shaoFactionWarPoints { //zhuang won
-		msg := fmt.Sprintf("Zhuang faction won the faction war!")
+		msg := "Zhuang faction won the faction war!"
 		makeAnnouncement(msg)
 
 		for _, c := range zhuangFactionWarMembersList { //give item to all zhuangs
@@ -235,7 +235,7 @@ func finishFactionWar() {
 		}
 
 	} else { // shao won
-		msg := fmt.Sprintf("Shao faction won the faction war!")
+		msg := "Shao faction won the faction war!"
 		makeAnnouncement(msg)
 		for _, c := range zhuangFactionWarMembersList { //give item to all zhuangs
 			if c == nil {

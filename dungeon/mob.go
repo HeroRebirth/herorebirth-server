@@ -30,7 +30,7 @@ func StartDungeon(char *database.Socket) {
 		char.Character.Socket.User.ConnectedServer = server
 		data, _ := char.Character.ChangeMap(229, nil)
 		char.Conn.Write(data)
-		char.Conn.Write(messaging.InfoMessage(fmt.Sprintf("Welcome to Pecetek's Dungeon. You have 30 minutes, Survive & Slay the Monsters.")))
+		char.Conn.Write(messaging.InfoMessage("Welcome to Pecetek's Dungeon. You have 30 minutes, Survive & Slay the Monsters."))
 		Createmob(server)
 		StartTimer(char)
 	}
@@ -162,7 +162,7 @@ func BossSpawn(mobInt int, serverID int) {
 
 func FindTheNumber(s *database.Socket) {
 	s.Character.CanTip = 2
-	s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("Congratulations! Now guess the Boss's Favourite Number [1 - 10] Type:/number [no]")))
+	s.Conn.Write(messaging.InfoMessage("Congratulations! Now guess the Boss's Favourite Number [1 - 10] Type:/number [no]"))
 	if s.Character.GeneratedNumber == 0 {
 		min := 1
 		max := 10

@@ -241,7 +241,7 @@ func (h *PressButtonHandler) Handle(s *database.Socket, data []byte) ([]byte, er
 	key := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(indexes)), "."), "[]")
 	script = gjson.Get(script, key).String()
 	if script != "" {
-		textID := int(gjson.Get(script, fmt.Sprintf("text")).Int())
+		textID := int(gjson.Get(script, "text").Int())
 		actions := []int{}
 
 		for _, action := range gjson.Get(script, "actions").Array() {
@@ -845,7 +845,7 @@ func (h *PressButtonHandler) Handle(s *database.Socket, data []byte) ([]byte, er
 
 				} else {
 
-					resp.Concat(messaging.InfoMessage(fmt.Sprintf("You don't have class."))) //NOTICE TO NO SELECTED CLASS
+					resp.Concat(messaging.InfoMessage("You don't have class.")) //NOTICE TO NO SELECTED CLASS
 				}
 			}
 		case 232: //Shin-Gang Region

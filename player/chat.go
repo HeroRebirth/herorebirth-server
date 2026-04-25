@@ -1021,10 +1021,10 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 				return nil, err
 			}
 			if int(number) == s.Character.GeneratedNumber {
-				s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("You guessed right, Show the boss your power.")))
+				s.Conn.Write(messaging.InfoMessage("You guessed right, Show the boss your power."))
 				s.Character.DungeonLevel++
 			} else {
-				s.Conn.Write(messaging.InfoMessage(fmt.Sprintf("You guessed poorly, survive & slay again!")))
+				s.Conn.Write(messaging.InfoMessage("You guessed poorly, survive & slay again!"))
 				dungeon.MobsCreate([]int{40522}, s.User.ConnectedServer)
 				s.Character.CanTip = 3
 			}
@@ -1391,7 +1391,7 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 				database.StartWarTimer(int(600))
 			})
 			c.Start()
-			return messaging.InfoMessage(fmt.Sprintf("Auto Great War activated")), nil
+			return messaging.InfoMessage("Auto Great War activated"), nil
 		case "autofactionwar":
 			if s.User.UserType < server.HGM_USER {
 				return nil, nil
@@ -1401,7 +1401,7 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 				database.PrepareFactionWar()
 			})
 			c.Start()
-			return messaging.InfoMessage(fmt.Sprintf("Auto Faction War activated")), nil
+			return messaging.InfoMessage("Auto Faction War activated"), nil
 		case "speed":
 			if s.User.UserType < server.GM_USER {
 				return nil, nil

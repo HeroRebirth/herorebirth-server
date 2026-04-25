@@ -34,7 +34,7 @@ func StartTimer(char *database.Socket) {
 		}
 		if timeRemaining.t <= 0 || char.Character.Map != 229 || char.Character.IsOnline == false {
 			resp := utils.Packet{}
-			resp.Concat(messaging.InfoMessage(fmt.Sprintf("You have failed. Come again when you are stronger. Teleporting to safe zone.")))
+			resp.Concat(messaging.InfoMessage("You have failed. Come again when you are stronger. Teleporting to safe zone."))
 			DeleteMobs(char.User.ConnectedServer)
 			char.Character.Socket.User.ConnectedServer = 1
 			data, _ := char.Character.ChangeMap(1, nil)

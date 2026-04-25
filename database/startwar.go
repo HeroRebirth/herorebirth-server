@@ -82,10 +82,10 @@ func JoinToWarLobby(char *Character) {
 	}
 	if warReady {
 		for _, char := range ActiveWars[int(1)].ShaoPlayers {
-			char.Socket.Write(messaging.InfoMessage(fmt.Sprintf("Your war is ready. /accept war ")))
+			char.Socket.Write(messaging.InfoMessage("Your war is ready. /accept war "))
 		}
 		for _, char := range ActiveWars[int(1)].ZuhangPlayers {
-			char.Socket.Write(messaging.InfoMessage(fmt.Sprintf("Your war is ready. /accept war ")))
+			char.Socket.Write(messaging.InfoMessage("Your war is ready. /accept war "))
 		}
 		CheckALlPlayersReady()
 	}
@@ -99,7 +99,7 @@ func secondsToMinutes(inSeconds int) (int, int) {
 func StartWarTimer(prepareWarStart int) {
 	min, sec := secondsToMinutes(prepareWarStart)
 	msg := fmt.Sprintf("%d minutes %d second after the Great War will start.", min, sec)
-	msg2 := fmt.Sprintf("Please participate war by ")
+	msg2 := "Please participate war by "
 	makeAnnouncement(msg)
 	makeAnnouncement(msg2)
 	if prepareWarStart > 0 {
