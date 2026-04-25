@@ -32,7 +32,7 @@ func (b *Rank) Delete() error {
 func (b *Rank) Update() error {
 	_, err := db.Update(b)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error: %s", err.Error()))
+		fmt.Printf("Error: %s\n", err.Error())
 	}
 	return err
 }

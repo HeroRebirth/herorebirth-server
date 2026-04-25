@@ -5598,7 +5598,7 @@ func (c *Character) ApplyBuffEffectToAi(ai *AI, buffid int, dps int, duration in
 		buff := &AiBuff{ID: buffid, AiID: int(ai.PseudoID), Name: infection.Name, HPRecoveryRate: dps, StartedAt: secs, CharacterID: s.Character.ID, Duration: duration}
 		err = buff.Create()
 		if err != nil {
-			fmt.Println(fmt.Sprintf("Error: %s", err.Error()))
+			fmt.Printf("Error: %s\n", err.Error())
 			return
 		}
 

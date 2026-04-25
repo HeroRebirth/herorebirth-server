@@ -453,7 +453,7 @@ func exploreMobs(s *database.Socket) {
 				br.SetLength(int16(index))
 				r.Concat(br)
 			} else if err != nil && len(buffs) != 0 {
-				fmt.Println(fmt.Sprintf("LoadBuffsToMob: %s", err.Error()))
+				fmt.Printf("LoadBuffsToMob: %s\n", err.Error())
 			}
 			if c.IsinWar {
 				isStone := Tester(database.WarStonesIDs, mob.PseudoID)
