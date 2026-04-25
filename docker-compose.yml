@@ -1,0 +1,53 @@
+services:
+  server:
+    build: .
+    container_name: hero-rebirth
+    ports:
+      - "${SERVER_PORT:-5310}:5310"
+    depends_on:
+      - mariadb
+      # - redis
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=mariadb
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVER_PORT=5310
+    networks:
+      - app-network
+
+  mariadb:
+    image: mariadb:10.6
+    container_name: hero-rebirth-mariadb
+    env_file:
+      - .env
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=herorebirth
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: hero-rebirth-redis
+    env_file:
+      - .env
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+volumes:
+  mariadb_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge
