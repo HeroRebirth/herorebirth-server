@@ -38,8 +38,8 @@ docker-compose up -d
 ```
 See `docker-compose.yml` for details.
 
-### Admin Commands
-A full list of in-game admin slash commands and examples is available in [ADMIN_COMMANDS.md](ADMIN_COMMANDS.md).
+### Commands
+A full list of in-game slash commands and examples is available in [commands.md](commands.md).
 
 ## Contributing
 

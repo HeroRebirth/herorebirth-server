@@ -496,6 +496,15 @@ Role values: `0` = Banned, `1` = Common, `2` = GA, `3` = GAL, `4` = GM, `5` = HG
 
 ---
 
+### `/logskills`
+Toggle the WPE / skill-spam detection system on or off. When active, all skill casts are monitored for suspiciously fast timing. Players who cast below the threshold repeatedly are auto-banned and logged to `logs/wpe_detected.txt`. The system starts enabled by default (controlled by `SKILL_LOG_ENABLED` in `.env`).
+
+```
+/logskills
+```
+
+---
+
 ### `/skillpoint <character_name> <amount>`
 Add skill points to a character.
 

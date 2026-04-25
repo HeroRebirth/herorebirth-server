@@ -11,4 +11,5 @@ CLAUDE.md
 Log.txt
 migrate.sh
 migrations/herorebirth_seed.sql
+migrations/map1_npc_scripts.sql
 hero-data-db

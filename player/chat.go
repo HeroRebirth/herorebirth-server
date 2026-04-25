@@ -1496,6 +1496,19 @@ func (h *ChatHandler) cmdMessage(s *database.Socket, data []byte) ([]byte, error
 
 			user.UserType = int8(role)
 			user.Update()
+		case "logskills":
+			if s.User.UserType < server.HGM_USER {
+				return nil, nil
+			}
+			database.SkillLoggingEnabled = !database.SkillLoggingEnabled
+			var statusMsg string
+			if database.SkillLoggingEnabled {
+				statusMsg = "Skill logging is now activated."
+			} else {
+				statusMsg = "Skill logging is now deactivated."
+			}
+			resp.Concat(messaging.InfoMessage(statusMsg))
+			return resp, nil
 		case "skillpoint":
 			if s.User.UserType < server.HGM_USER {
 				return nil, nil

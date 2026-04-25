@@ -5260,6 +5260,7 @@ func (c *Character) RemovePassiveSkill(slotIndex, skillIndex byte, bookID int64)
 }
 
 func (c *Character) CastSkill(attackCounter, skillID, targetID int, cX, cY, cZ float64) ([]byte, error) {
+	logSkillCast(c, skillID)
 
 	slots, err := c.InventorySlots()
 	if err != nil {
