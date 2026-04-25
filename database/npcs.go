@@ -53,7 +53,7 @@ func (e *NPC) Delete() error {
 func GetAllNPCs() (map[int]*NPC, error) {
 
 	var arr []*NPC
-	query := `select * from "data".npc_table`
+	query := `select * from npc_table`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -73,7 +73,7 @@ func GetAllNPCs() (map[int]*NPC, error) {
 func FindNPCByID(id int) (*NPC, error) {
 
 	npc := &NPC{}
-	query := `select * from "data".npc_table where "id" = $1`
+	query := `select * from npc_table where id = ?`
 
 	if err := db.SelectOne(&npc, query, id); err != nil {
 		if err == sql.ErrNoRows {

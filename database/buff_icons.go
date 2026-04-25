@@ -31,7 +31,7 @@ func (e *BuffIcon) Delete() error {
 
 func getBuffIcons() error {
 	var buffIcons []*BuffIcon
-	query := `select * from data.buff_icons`
+	query := `select * from buff_icons`
 
 	if _, err := db.Select(&buffIcons, query); err != nil {
 		if err == sql.ErrNoRows {

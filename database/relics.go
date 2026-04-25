@@ -34,7 +34,7 @@ func (e *Relic) Delete() error {
 
 func getRelics() error {
 	var relics []*Relic
-	query := `select * from hops.relics`
+	query := `select * from relics`
 
 	if _, err := db.Select(&relics, query); err != nil {
 		if err == sql.ErrNoRows {

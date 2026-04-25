@@ -43,7 +43,7 @@ func (p *PetExpInfo) Delete() error {
 func GetAllPetExps() error {
 
 	var arr []*PetExpInfo
-	query := `select * from "data".pet_exp_table`
+	query := `select * from pet_exp_table`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {

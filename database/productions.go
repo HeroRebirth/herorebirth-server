@@ -55,7 +55,7 @@ func (e *Production) GetMaterials() ([]*ProductionMaterial, error) {
 
 func getProductions() error {
 	var prods []*Production
-	query := `select * from data.productions`
+	query := `select * from productions`
 
 	if _, err := db.Select(&prods, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -73,7 +73,7 @@ func getProductions() error {
 
 func RefreshProductions() error {
 	var prods []*Production
-	query := `select * from data.productions`
+	query := `select * from productions`
 
 	if _, err := db.Select(&prods, query); err != nil {
 		if err == sql.ErrNoRows {

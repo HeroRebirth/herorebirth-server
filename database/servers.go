@@ -54,7 +54,7 @@ func GetServers() ([]*ServerItem, error) {
 	)
 
 	if len(servers) == 0 {
-		query := `select * from hops.servers`
+		query := `select * from servers`
 
 		if _, err := db.Select(&servers, query); err != nil {
 			if err == sql.ErrNoRows {
@@ -91,7 +91,7 @@ func GetServerByID(id string) (*ServerItem, error) {
 		server = &Server{}
 	)
 
-	query := `select * from hops.servers where id = $1`
+	query := `select * from servers where id = ?`
 
 	if err := db.SelectOne(&server, query, id); err != nil {
 		if err == sql.ErrNoRows {
@@ -101,7 +101,7 @@ func GetServerByID(id string) (*ServerItem, error) {
 	}
 
 	i := &ServerItem{*server, 0}
-	query = `select count(*) from hops.users where server = $1`
+	query = `select count(*) from users where server = ?`
 	count, err := db.SelectInt(query, server.ID)
 	if err != nil {
 		return nil, fmt.Errorf("GetConnectedUserCount: %s", err.Error())

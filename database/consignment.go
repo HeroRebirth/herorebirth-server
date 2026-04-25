@@ -88,43 +88,45 @@ func GetConsignmentItems(page, category, minUpgLevel, maxUpgLevel, orderBy int, 
 	query := ``
 	cats, ok := categories[category]
 	if !ok {
-		query = `select c.* from hops.consignment c
-		inner join hops.items_characters ic on c.id = ic.id
-		inner join data.items i on i.id = ic.item_id
-		where is_sold = false and c.price >= $1 and c.price <= $2 and 
-		lower(c.item_name) like lower($3) and ic.plus >= $4 and ic.plus <= $5`
+		query = "select c.* from consignment c" +
+			" inner join items_characters ic on c.id = ic.id" +
+			" inner join items i on i.id = ic.item_id" +
+			" where is_sold = false and c.price >= ? and c.price <= ?" +
+			" and lower(c.item_name) like lower(?) and ic.plus >= ? and ic.plus <= ?"
 
 	} else if cats[0] < 0 {
-		query = `select c.* from hops.consignment c
-		inner join hops.items_characters ic on c.id = ic.id
-		inner join data.items i on i.id = ic.item_id
-		where is_sold = false and c.price >= $1 and c.price <= $2 and 
-		lower(c.item_name) like lower($3) and ic.plus >= $4 and ic.plus <= $5 and 
-		-i."type" in (%s) and i.ht_type > 0 `
+		query = "select c.* from consignment c" +
+			" inner join items_characters ic on c.id = ic.id" +
+			" inner join items i on i.id = ic.item_id" +
+			" where is_sold = false and c.price >= ? and c.price <= ?" +
+			" and lower(c.item_name) like lower(?) and ic.plus >= ? and ic.plus <= ?" +
+			" and -i.`type` in (%s) and i.ht_type > 0"
 
 		query = fmt.Sprintf(query, strings.Trim(strings.Join(strings.Fields(fmt.Sprint(cats)), ","), "[]"))
 
 	} else if cats[0] > 255 {
-		query = `select c.* from hops.consignment c
-		inner join hops.items_characters ic on c.id = ic.id
-		inner join data.items i on i.id = ic.item_id
-		where is_sold = false and c.price >= $1 and c.price <= $2 and 
-		lower(c.item_name) like lower($3) and ic.plus >= $4 and ic.plus <= $5 and i.slot in (%s)`
+		query = "select c.* from consignment c" +
+			" inner join items_characters ic on c.id = ic.id" +
+			" inner join items i on i.id = ic.item_id" +
+			" where is_sold = false and c.price >= ? and c.price <= ?" +
+			" and lower(c.item_name) like lower(?) and ic.plus >= ? and ic.plus <= ?" +
+			" and i.slot in (%s)"
 
 		query = fmt.Sprintf(query, strings.Trim(strings.Join(strings.Fields(fmt.Sprint(cats)), ","), "[]"))
 
 	} else {
-		query = `select c.* from hops.consignment c
-		inner join hops.items_characters ic on c.id = ic.id
-		inner join data.items i on i.id = ic.item_id
-		where is_sold = false and c.price >= $1 and c.price <= $2 and 
-		lower(c.item_name) like lower($3) and ic.plus >= $4 and ic.plus <= $5 and i.type in (%s)`
+		query = "select c.* from consignment c" +
+			" inner join items_characters ic on c.id = ic.id" +
+			" inner join items i on i.id = ic.item_id" +
+			" where is_sold = false and c.price >= ? and c.price <= ?" +
+			" and lower(c.item_name) like lower(?) and ic.plus >= ? and ic.plus <= ?" +
+			" and i.`type` in (%s)"
 
 		query = fmt.Sprintf(query, strings.Trim(strings.Join(strings.Fields(fmt.Sprint(cats)), ","), "[]"))
 	}
 
 	countQuery := strings.Replace(query, "c.*", "count(*)", 1)
-	query = fmt.Sprintf("%s order by %s %s offset $6 limit 20", query, orders[order], direction)
+	query = fmt.Sprintf("%s order by %s %s limit 20 offset ?", query, orders[order], direction)
 
 	var err error
 	items := []*ConsignmentItem{}
@@ -156,7 +158,7 @@ func CountConsignmentItems(category, minUpgLevel, maxUpgLevel int, minPrice, max
 		maxPrice = math.MaxInt64
 	}
 
-	query := `select * from hops.consignment c where is_sold = false and price >= $1 and price <= $2`
+	query := `select * from consignment c where is_sold = false and price >= ? and price <= ?`
 
 	var items []*ConsignmentItem
 	if _, err = db.Select(&items, query, minPrice, maxPrice); err != nil {
@@ -199,7 +201,7 @@ func CountConsignmentItems(category, minUpgLevel, maxUpgLevel int, minPrice, max
 
 func FindConsignmentItemsBySellerID(sellerID int) ([]*ConsignmentItem, error) {
 
-	query := `select * from hops.consignment where seller_id = $1 order by expires_at desc`
+	query := `select * from consignment where seller_id = ? order by expires_at desc`
 
 	items := []*ConsignmentItem{}
 	if _, err := db.Select(&items, query, sellerID); err != nil {
@@ -214,7 +216,7 @@ func FindConsignmentItemsBySellerID(sellerID int) ([]*ConsignmentItem, error) {
 
 func FindConsignmentItemByID(id int) (*ConsignmentItem, error) {
 
-	query := `select * from hops.consignment where id = $1`
+	query := `select * from consignment where id = ?`
 
 	item := &ConsignmentItem{}
 	if err := db.SelectOne(&item, query, id); err != nil {

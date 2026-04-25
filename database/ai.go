@@ -94,7 +94,7 @@ func (ai *AI) Create() error {
 
 func GetAllAI() error {
 	var arr []*AI
-	query := `select * from hops.ai order by id`
+	query := `select * from ai order by id`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {

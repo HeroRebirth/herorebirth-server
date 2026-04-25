@@ -110,7 +110,7 @@ func NewSlot() *InventorySlot {
 func FindInventorySlotsByCharacterID(characterID int) ([]*InventorySlot, error) {
 
 	var arr []*InventorySlot
-	query := `select * from hops.items_characters where character_id=$1 and consignment=false and slot_id >= 0 order by slot_id asc`
+	query := `select * from items_characters where character_id=? and consignment=false and slot_id >= 0 order by slot_id asc`
 	if _, err := db.Select(&arr, query, characterID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -135,7 +135,7 @@ func FindInventorySlotByID(id int) (*InventorySlot, error) {
 	}
 
 	s := NewSlot()
-	query := `select * from hops.items_characters where id = $1`
+	query := `select * from items_characters where id = ?`
 	if err := db.SelectOne(s, query, id); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -150,7 +150,7 @@ func FindInventorySlotByID(id int) (*InventorySlot, error) {
 func FindBankSlotsByUserID(userID string) ([]*InventorySlot, error) {
 
 	var arr []*InventorySlot
-	query := `select * from hops.items_characters where user_id = $1 and character_id is NULL and slot_id >= 0 order by slot_id asc`
+	query := `select * from items_characters where user_id = ? and character_id is NULL and slot_id >= 0 order by slot_id asc`
 	if _, err := db.Select(&arr, query, userID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

@@ -322,7 +322,7 @@ func (g *Guild) GetData(issuer *Character) ([]byte, error) {
 func FindGuildByName(name string) (*Guild, error) {
 
 	var g Guild
-	query := `select * from hops.guilds where name = $1`
+	query := `select * from guilds where name = ?`
 
 	if err := db.SelectOne(&g, query, name); err != nil {
 		if err == sql.ErrNoRows {
@@ -343,7 +343,7 @@ func FindGuildByID(id int) (*Guild, error) {
 	}
 
 	var g Guild
-	query := `select * from hops.guilds where id = $1`
+	query := `select * from guilds where id = ?`
 
 	if err := db.SelectOne(&g, query, id); err != nil {
 		if err == sql.ErrNoRows {

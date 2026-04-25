@@ -45,7 +45,7 @@ func (e *Fusion) Delete() error {
 
 func getAdvancedFusions() error {
 	var fusions []*Fusion
-	query := `select * from data.advanced_fusion`
+	query := `select * from advanced_fusion`
 
 	if _, err := db.Select(&fusions, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -63,7 +63,7 @@ func getAdvancedFusions() error {
 
 func RefreshAdvancedFusions() error {
 	var fusions []*Fusion
-	query := `select * from data.advanced_fusion`
+	query := `select * from advanced_fusion`
 
 	if _, err := db.Select(&fusions, query); err != nil {
 		if err == sql.ErrNoRows {

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 
 	NATS "github.com/nats-io/nats.go"
@@ -31,6 +32,9 @@ func (csh *CharacterSelectionHandler) selectCharacter(s *database.Socket) ([]byt
 	character, err := database.FindCharacterByID(csh.id)
 	if err != nil {
 		return nil, err
+	}
+	if character == nil {
+		return nil, fmt.Errorf("character not found: id=%d", csh.id)
 	}
 
 	character.IsOnline = false

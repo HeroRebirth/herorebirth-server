@@ -694,9 +694,7 @@ func exploreNPCs(s *database.Socket) {
 	c.OnSight.NpcMutex.RUnlock()
 
 	for _, id := range losers {
-		loserPos := funk.Filter(database.NPCPos, func(pos *database.NpcPosition) bool {
-			return pos.ID == id
-		}).([]*database.NpcPosition)[0]
+		loserPos := database.NPCPos[id]
 
 		if loserPos == nil {
 			continue

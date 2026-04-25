@@ -40,7 +40,7 @@ func (b *Rank) Update() error {
 func FindRankByHonorID(rankID int64) (*Rank, error) {
 
 	var g Rank
-	query := `select * from data.reborn_system where honor_id = $1`
+	query := `select * from reborn_system where honor_id = ?`
 
 	if err := db.SelectOne(&g, query, rankID); err != nil {
 		if err == sql.ErrNoRows {

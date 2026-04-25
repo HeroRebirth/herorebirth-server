@@ -42,7 +42,7 @@ func (e *Gambling) Delete() error {
 
 func getGamblingItems() error {
 	var gamblings []*Gambling
-	query := `select * from data.gambling`
+	query := `select * from gambling`
 
 	if _, err := db.Select(&gamblings, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -60,7 +60,7 @@ func getGamblingItems() error {
 
 func RefreshGamblingItems() error {
 	var gamblings []*Gambling
-	query := `select * from data.gambling`
+	query := `select * from gambling`
 
 	if _, err := db.Select(&gamblings, query); err != nil {
 		if err == sql.ErrNoRows {

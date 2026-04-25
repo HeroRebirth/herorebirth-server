@@ -48,7 +48,8 @@ func (lh *LoginHandler) login(s *database.Socket) ([]byte, error) {
 	}
 
 	var resp utils.Packet
-	if strings.Compare(lh.password, user.Password) == 0 {
+	// if strings.Compare(lh.password, user.Password) == 0 {
+	if strings.EqualFold(lh.password, user.Password) {
 
 		if user.UserType == 0 { // Banned
 			resp = USER_BANNED

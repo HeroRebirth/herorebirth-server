@@ -72,7 +72,7 @@ func (e *ItemMelting) GetItemCounts() ([]int, error) {
 
 func getItemMeltings() error {
 	var meltings []*ItemMelting
-	query := `select * from data.item_meltings`
+	query := `select * from item_meltings`
 
 	if _, err := db.Select(&meltings, query); err != nil {
 		if err == sql.ErrNoRows {

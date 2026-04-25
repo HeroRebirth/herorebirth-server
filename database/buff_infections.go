@@ -99,7 +99,7 @@ func (e *BuffInfection) Update() error {
 
 func getBuffInfections() error {
 	var buffInfections []*BuffInfection
-	query := `select * from data.buff_infections`
+	query := `select * from buff_infections`
 
 	if _, err := db.Select(&buffInfections, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -117,7 +117,7 @@ func getBuffInfections() error {
 
 func RefreshBuffInfections() error {
 	var buffInfections []*BuffInfection
-	query := `select * from data.buff_infections`
+	query := `select * from buff_infections`
 
 	if _, err := db.Select(&buffInfections, query); err != nil {
 		if err == sql.ErrNoRows {

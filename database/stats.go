@@ -224,7 +224,7 @@ func FindStatByID(id int) (*Stat, error) {
 	}
 
 	stat := &Stat{}
-	query := `select * from hops.stats where id = $1`
+	query := `select * from stats where id = ?`
 
 	if err := db.SelectOne(&stat, query, id); err != nil {
 		if err == sql.ErrNoRows {

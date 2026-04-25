@@ -56,8 +56,8 @@ func CreateMobsToNcash(aiMapID int16) {
 	NPCsTest := []int{1000016}
 	for _, action := range NPCsSpawnPoint {
 		for i := 0; i < int(30); i++ {
-			npcPos := &database.NpcPosition{ID: len(database.NPCPos), NPCID: int(NPCsTest[0]), MapID: aiMapID, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
-			database.NPCPos = append(database.NPCPos, npcPos)
+			npcPos := &database.NpcPosition{ID: len(database.NPCPos) + 1, NPCID: int(NPCsTest[0]), MapID: aiMapID, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
+			database.NPCPos[npcPos.ID] = npcPos
 			npc, _ := database.NPCs[NPCsTest[0]]
 			newai := &database.AI{ID: len(database.AIs), HP: npc.MaxHp, Map: aiMapID, PosID: npcPos.ID, RunningSpeed: 10, Server: 100, WalkingSpeed: 5, Once: false}
 			newai.OnSightPlayers = make(map[int]interface{})
@@ -94,8 +94,8 @@ func Createmob(serverID int) {
 	for _, action := range NPCsTest {
 		for i := 0; i < int(20); i++ {
 			randomInt := rand.Intn(len(NPCsSpawnPoint))
-			npcPos := &database.NpcPosition{ID: len(database.NPCPos), NPCID: int(action), MapID: 229, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
-			database.NPCPos = append(database.NPCPos, npcPos)
+			npcPos := &database.NpcPosition{ID: len(database.NPCPos) + 1, NPCID: int(action), MapID: 229, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
+			database.NPCPos[npcPos.ID] = npcPos
 			npc, _ := database.NPCs[action]
 			newai := &database.AI{ID: len(database.AIs), HP: npc.MaxHp, Map: 229, PosID: npcPos.ID, RunningSpeed: 10, Server: serverID, WalkingSpeed: 5, Once: true}
 			newai.OnSightPlayers = make(map[int]interface{})
@@ -131,8 +131,8 @@ func randFloats(min, max float64) float64 {
 
 func BossSpawn(mobInt int, serverID int) {
 	NPCsSpawnPoint := "211,235"
-	npcPos := &database.NpcPosition{ID: len(database.NPCPos), NPCID: int(mobInt), MapID: 229, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
-	database.NPCPos = append(database.NPCPos, npcPos)
+	npcPos := &database.NpcPosition{ID: len(database.NPCPos) + 1, NPCID: int(mobInt), MapID: 229, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
+	database.NPCPos[npcPos.ID] = npcPos
 	npc, _ := database.NPCs[mobInt]
 	newai := &database.AI{ID: len(database.AIs), HP: npc.MaxHp, Map: 229, PosID: npcPos.ID, RunningSpeed: 10, Server: serverID, WalkingSpeed: 5, Once: true}
 	newai.OnSightPlayers = make(map[int]interface{})
@@ -177,8 +177,8 @@ func MobsCreate(mobsID []int, serverID int) {
 	for _, action := range mobsID {
 		randomInt := rand.Intn(len(NPCsSpawnPoint))
 		for i := 0; i < int(20); i++ {
-			npcPos := &database.NpcPosition{ID: len(database.NPCPos), NPCID: int(action), MapID: 229, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
-			database.NPCPos = append(database.NPCPos, npcPos)
+			npcPos := &database.NpcPosition{ID: len(database.NPCPos) + 1, NPCID: int(action), MapID: 229, Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: "120,120", MaxLocation: "150,150"}
+			database.NPCPos[npcPos.ID] = npcPos
 			npc, _ := database.NPCs[action]
 			newai := &database.AI{ID: len(database.AIs), HP: npc.MaxHp, Map: 229, PosID: npcPos.ID, RunningSpeed: 10, Server: serverID, WalkingSpeed: 5, Once: true}
 			newai.OnSightPlayers = make(map[int]interface{})

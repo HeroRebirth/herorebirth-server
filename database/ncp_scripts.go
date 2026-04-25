@@ -36,7 +36,7 @@ func (e *NPCScript) Delete() error {
 
 func getScripts() error {
 	var scripts []*NPCScript
-	query := `select * from data.npc_scripts`
+	query := `select * from npc_scripts`
 
 	if _, err := db.Select(&scripts, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -54,7 +54,7 @@ func getScripts() error {
 
 func RefreshScripts() error {
 	var scripts []*NPCScript
-	query := `select * from data.npc_scripts`
+	query := `select * from npc_scripts`
 
 	if _, err := db.Select(&scripts, query); err != nil {
 		if err == sql.ErrNoRows {

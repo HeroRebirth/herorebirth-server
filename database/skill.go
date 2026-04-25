@@ -62,7 +62,7 @@ func (e *SkillInfo) Update() error {
 
 func getSkillInfos() error {
 	var skills []*SkillInfo
-	query := `select * from data.skills`
+	query := `select * from skill_definitions`
 
 	if _, err := db.Select(&skills, query); err != nil {
 		if err == sql.ErrNoRows {

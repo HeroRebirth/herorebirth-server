@@ -62,7 +62,7 @@ func (b *Buff) Update() error {
 func FindBuffsByCharacterID(characterID int) ([]*Buff, error) {
 
 	var buffs []*Buff
-	query := `select * from hops.characters_buffs where character_id = $1`
+	query := `select * from characters_buffs where character_id = ?`
 
 	if _, err := db.Select(&buffs, query, characterID); err != nil {
 		if err == sql.ErrNoRows {
@@ -81,7 +81,7 @@ func FindBuffsByCharacterID(characterID int) ([]*Buff, error) {
 func FindBuffByID(buffID, characterID int) (*Buff, error) {
 
 	var buff *Buff
-	query := `select * from hops.characters_buffs where id = $1 and character_id = $2`
+	query := `select * from characters_buffs where id = ? and character_id = ?`
 
 	if err := db.SelectOne(&buff, query, buffID, characterID); err != nil {
 		if err == sql.ErrNoRows {

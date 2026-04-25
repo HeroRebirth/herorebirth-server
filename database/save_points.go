@@ -39,7 +39,7 @@ func (e *SavePoint) Delete() error {
 
 func getAllSavePoints() error {
 
-	query := `select * from data.save_points`
+	query := `select * from save_points`
 
 	t := []*SavePoint{}
 

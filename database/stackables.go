@@ -44,7 +44,7 @@ func FindStackableByUIF(uif string) *Stackable {
 
 func getStackables() error {
 	var stackables []*Stackable
-	query := `select * from data.stackables`
+	query := `select * from stackables`
 
 	if _, err := db.Select(&stackables, query); err != nil {
 		if err == sql.ErrNoRows {

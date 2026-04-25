@@ -78,7 +78,7 @@ func (e *DropInfo) Delete() error {
 
 func getAllDrops() error {
 	var drops []*DropInfo
-	query := `select * from data.drops`
+	query := `select * from drops`
 
 	if _, err := db.Select(&drops, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -95,7 +95,7 @@ func getAllDrops() error {
 }
 func RefreshAllDrops() error {
 	var drops []*DropInfo
-	query := `select * from data.drops`
+	query := `select * from drops`
 
 	if _, err := db.Select(&drops, query); err != nil {
 		if err == sql.ErrNoRows {

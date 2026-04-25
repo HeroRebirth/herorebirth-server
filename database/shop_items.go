@@ -46,7 +46,7 @@ func (e *ShopItem) GetItems() []int {
 
 func getAllShopItems() error {
 	var shopItems []*ShopItem
-	query := `select * from data.shop_items`
+	query := `select * from shop_items`
 
 	if _, err := db.Select(&shopItems, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -64,7 +64,7 @@ func getAllShopItems() error {
 
 func GetAllShopItems() error {
 	var shopItems []*ShopItem
-	query := `select * from data.shop_items`
+	query := `select * from shop_items`
 
 	if _, err := db.Select(&shopItems, query); err != nil {
 		if err == sql.ErrNoRows {

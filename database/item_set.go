@@ -24,7 +24,7 @@ func (e *ItemSet) Create() error {
 
 func getItemSet() error {
 	var sets []*ItemSet
-	query := `select * from data.item_set`
+	query := `select * from item_set`
 
 	if _, err := db.Select(&sets, query); err != nil {
 		if err == sql.ErrNoRows {

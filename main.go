@@ -118,6 +118,7 @@ func main() {
 	}
 
 	go api.InitGRPC()
+	go api.InitHTTP()
 	startServer()
 }
 

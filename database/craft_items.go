@@ -81,7 +81,7 @@ func (e *CraftItem) GetMaterials() ([]*CraftItemMaterial, error) {
 
 func getCraftItem() error {
 	var crafts []*CraftItem
-	query := `select * from data.craft_items`
+	query := `select * from craft_items`
 
 	if _, err := db.Select(&crafts, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -99,7 +99,7 @@ func getCraftItem() error {
 
 func RefreshCraftItem() error {
 	var crafts []*CraftItem
-	query := `select * from data.craft_items`
+	query := `select * from craft_items`
 
 	if _, err := db.Select(&crafts, query); err != nil {
 		if err == sql.ErrNoRows {

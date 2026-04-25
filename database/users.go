@@ -73,7 +73,7 @@ func FindUserByName(name string) (*User, error) {
 		}
 	}
 
-	query := `select * from hops.users where user_name = $1`
+	query := `select * from users where user_name = ?`
 
 	u := &User{}
 	if err := db.SelectOne(&u, query, name); err != nil {
@@ -100,7 +100,7 @@ func FindUserByNameCash(name string) (*User, error) {
 		}
 	}
 
-	query := `select * from hops.users where user_name = $1`
+	query := `select * from users where user_name = ?`
 
 	u := &User{}
 	if err := db.SelectOne(&u, query, name); err != nil {
@@ -126,7 +126,7 @@ func FindUserByID(id string) (*User, error) {
 		return u, nil
 	}
 
-	query := `select * from hops.users where id = $1`
+	query := `select * from users where id = ?`
 
 	u = &User{}
 	if err := db.SelectOne(&u, query, id); err != nil {
@@ -153,7 +153,7 @@ func FindUserByIP(ip string) (*User, error) {
 		}
 	}
 
-	query := `select id from hops.users where ip = $1`
+	query := `select id from users where ip = ?`
 
 	u := &User{}
 	if err := db.SelectOne(u, query, ip); err != nil {
@@ -180,7 +180,7 @@ func FindUserByMail(mail string) (*User, error) {
 		}
 	}
 
-	query := `select id from hops.users where mail = $1`
+	query := `select id from users where mail = ?`
 
 	u := &User{}
 	if err := db.SelectOne(&u, query, mail); err != nil {
@@ -295,7 +295,7 @@ func (u *User) GetTime() []byte {
 }
 func RefreshUsers() error {
 
-	query := `select * from hops.users`
+	query := `select * from users`
 
 	users := []*User{}
 

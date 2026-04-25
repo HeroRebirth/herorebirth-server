@@ -127,7 +127,7 @@ func FindSkillsByID(id int) (*Skills, error) {
 		return s, nil
 	}
 
-	query := `select * from hops.skills where id = $1`
+	query := `select * from skills where id = ?`
 	skills := &Skills{}
 	if err := db.SelectOne(&skills, query, id); err != nil {
 		if err == sql.ErrNoRows {

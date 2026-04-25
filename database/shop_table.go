@@ -47,7 +47,7 @@ func (e *Shop) GetTypes() []int {
 
 func getAllShops() error {
 	var shops []*Shop
-	query := `select * from data.shop_table`
+	query := `select * from shop_table`
 
 	if _, err := db.Select(&shops, query); err != nil {
 		if err == sql.ErrNoRows {

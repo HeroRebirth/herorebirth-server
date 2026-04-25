@@ -53,7 +53,7 @@ func (e *Pet) Delete() error {
 func GetAllPets() error {
 
 	var arr []*Pet
-	query := `select * from "data".pets`
+	query := `select * from pets`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {

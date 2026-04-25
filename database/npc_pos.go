@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	NPCPos []*NpcPosition
+	NPCPos map[int]*NpcPosition
 )
 
 type NpcPosition struct {
@@ -52,10 +52,10 @@ func (e *NpcPosition) Delete() error {
 	return err
 }
 
-func GetAllNPCPos() ([]*NpcPosition, error) {
+func GetAllNPCPos() (map[int]*NpcPosition, error) {
 
 	var arr []*NpcPosition
-	query := `select * from "data".npc_pos_table order by id`
+	query := `select * from npc_pos_table order by id`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -64,13 +64,17 @@ func GetAllNPCPos() ([]*NpcPosition, error) {
 		return nil, fmt.Errorf("GetAllNpcPos: %s", err.Error())
 	}
 
-	return arr, nil
+	m := make(map[int]*NpcPosition, len(arr))
+	for _, pos := range arr {
+		m[pos.ID] = pos
+	}
+	return m, nil
 }
 
 func GetAllAIPos() ([]*NpcPosition, error) {
 
 	var arr []*NpcPosition
-	query := `select * from "data".npc_pos_table WHERE is_npc = '0' order by id `
+	query := `select * from npc_pos_table WHERE is_npc = '0' order by id`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -85,7 +89,7 @@ func GetAllAIPos() ([]*NpcPosition, error) {
 func FindNPCPosByID(id int) (*NpcPosition, error) {
 
 	var pos *NpcPosition
-	query := `select * from "data".npc_pos_table where id = $1`
+	query := `select * from npc_pos_table where id = ?`
 
 	if err := db.SelectOne(&pos, query, id); err != nil {
 		if err == sql.ErrNoRows {
@@ -100,7 +104,7 @@ func FindNPCPosByID(id int) (*NpcPosition, error) {
 func FindNPCPosInMap(mapID int16) ([]*NpcPosition, error) {
 
 	var arr []*NpcPosition
-	query := `select * from "data".npc_pos_table where "map" = $1`
+	query := "select * from npc_pos_table where `map` = ?"
 
 	if _, err := db.Select(&arr, query, mapID); err != nil {
 		if err == sql.ErrNoRows {

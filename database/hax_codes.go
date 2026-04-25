@@ -35,7 +35,7 @@ func (e *HaxCode) Delete() error {
 func getHaxCodes() error {
 
 	var haxcodes []*HaxCode
-	query := `select * from data.hax_codes`
+	query := `select * from hax_codes`
 
 	if _, err := db.Select(&haxcodes, query); err != nil {
 		if err == sql.ErrNoRows {

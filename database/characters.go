@@ -361,7 +361,7 @@ func (t *Character) CopyInventorySlots() []*InventorySlot {
 }
 
 func RefreshAIDs() error {
-	query := `update hops.characters SET aid_time = 18000`
+	query := `update characters SET aid_time = 18000`
 	_, err := db.Exec(query)
 	if err != nil {
 		return err
@@ -387,7 +387,7 @@ func FindCharactersByUserID(userID string) ([]*Character, error) {
 	}
 
 	var arr []*Character
-	query := `select * from hops.characters where user_id = $1`
+	query := `select * from characters where user_id = ?`
 
 	if _, err := db.Select(&arr, query, userID); err != nil {
 		if err == sql.ErrNoRows {
@@ -426,7 +426,7 @@ func IsValidUsername(name string) (bool, error) {
 		return false, nil
 	}
 
-	query = `select count(*) from hops.characters where lower(name) = $1`
+	query = `select count(*) from characters where lower(name) = ?`
 
 	if count, err = db.SelectInt(query, strings.ToLower(name)); err != nil {
 		return false, fmt.Errorf("IsValidUsername: %s", err.Error())
@@ -444,7 +444,7 @@ func FindCharacterByName(name string) (*Character, error) {
 	}
 
 	character := &Character{}
-	query := `select * from hops.characters where name = $1`
+	query := `select * from characters where name = ?`
 
 	if err := db.SelectOne(&character, query, name); err != nil {
 		if err == sql.ErrNoRows {
@@ -465,7 +465,7 @@ func FindAllCharacter() ([]*Character, error) {
 	charMap := make(map[int]*Character)
 
 	var arr []*Character
-	query := `select * from hops.characters`
+	query := `select * from characters`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -502,7 +502,7 @@ func FindCharacterByID(id int) (*Character, error) {
 	}
 
 	character := &Character{}
-	query := `select * from hops.characters where id = $1`
+	query := `select * from characters where id = ?`
 
 	if err := db.SelectOne(&character, query, id); err != nil {
 		if err == sql.ErrNoRows {
@@ -613,8 +613,10 @@ func DeleteCharacterFromCache(id int) {
 }
 
 func (c *Character) GetNearbyCharacters() ([]*Character, error) {
-	const distance = 50.0
-	const distanceSquared = distance * distance
+
+	var (
+		distance = float64(50)
+	)
 
 	u, err := FindUserByID(c.UserID)
 	if err != nil {
@@ -622,53 +624,23 @@ func (c *Character) GetNearbyCharacters() ([]*Character, error) {
 	}
 
 	myCoordinate := ConvertPointToLocation(c.Coordinate)
-	result := make([]*Character, 0, 32)
-
 	characterMutex.RLock()
-	defer characterMutex.RUnlock()
+	allChars := funk.Values(characters)
+	characterMutex.RUnlock()
+	characters := funk.Filter(allChars, func(character *Character) bool {
 
-	for _, character := range characters {
-		if character == nil {
-			continue
-		}
-		if !character.IsOnline {
-			continue
-		}
-		if character.Map != c.Map {
-			continue
-		}
-		if character.Invisible && !c.DetectionMode {
-			continue
-		}
-		if character.ID == c.ID {
-			continue
-		}
-
-		var user *User
-		if character.Socket != nil && character.Socket.User != nil {
-			user = character.Socket.User
-		} else {
-			user, err = FindUserByID(character.UserID)
-			if err != nil || user == nil {
-				continue
-			}
-		}
-
-		if user.ConnectedServer != u.ConnectedServer {
-			continue
+		user, err := FindUserByID(character.UserID)
+		if err != nil || user == nil {
+			return false
 		}
 
 		characterCoordinate := ConvertPointToLocation(character.Coordinate)
-		dx := characterCoordinate.X - myCoordinate.X
-		dy := characterCoordinate.Y - myCoordinate.Y
-		distSq := dx*dx + dy*dy
 
-		if distSq <= distanceSquared {
-			result = append(result, character)
-		}
-	}
+		return character.IsOnline && user.ConnectedServer == u.ConnectedServer && character.Map == c.Map &&
+			(!character.Invisible || c.DetectionMode) && utils.CalculateDistance(characterCoordinate, myCoordinate) <= distance
+	}).([]*Character)
 
-	return result, nil
+	return characters, nil
 }
 
 func (c *Character) GetNearbyAIIDs() ([]int, error) {
@@ -721,19 +693,14 @@ func (c *Character) GetNearbyNPCIDs() ([]int, error) {
 		return nil, nil
 	}
 
-	filtered := funk.Filter(NPCPos, func(pos *NpcPosition) bool {
-
-		characterCoordinate := ConvertPointToLocation(c.Coordinate)
+	characterCoordinate := ConvertPointToLocation(c.Coordinate)
+	for _, pos := range NPCPos {
 		minLocation := ConvertPointToLocation(pos.MinLocation)
 		maxLocation := ConvertPointToLocation(pos.MaxLocation)
-
 		npcCoordinate := &utils.Location{X: (minLocation.X + maxLocation.X) / 2, Y: (minLocation.Y + maxLocation.Y) / 2}
-
-		return c.Map == pos.MapID && utils.CalculateDistance(characterCoordinate, npcCoordinate) <= distance && pos.IsNPC && !pos.Attackable
-	})
-
-	for _, pos := range filtered.([]*NpcPosition) {
-		ids = append(ids, pos.ID)
+		if c.Map == pos.MapID && utils.CalculateDistance(characterCoordinate, npcCoordinate) <= distance && pos.IsNPC && !pos.Attackable {
+			ids = append(ids, pos.ID)
+		}
 	}
 
 	return ids, nil
@@ -1017,7 +984,7 @@ func (c *Character) ShowItems() ([]byte, error) {
 func FindOnlineCharacterByUserID(userID string) (*Character, error) {
 
 	var id int
-	query := `select id from hops.characters where user_id = $1 and is_online = true`
+	query := `select id from characters where user_id = ? and is_online = true`
 
 	if err := db.SelectOne(&id, query, userID); err != nil {
 		if err == sql.ErrNoRows {
@@ -1251,7 +1218,7 @@ func (c *Character) AddItem(itemToAdd *InventorySlot, slotID int16, lootingDrop 
 	itemToAdd.UserID = null.StringFrom(c.UserID)
 
 	i := Items[itemToAdd.ItemID]
-	stackable := FindStackableByUIF(i.UIF)
+	stackable := FindStackableByUIF(i.UIF.String)
 
 	slots, err := c.InventorySlots()
 	if err != nil {
@@ -1506,7 +1473,7 @@ func (c *Character) ReplaceItem(itemID int, where, to int16) ([]byte, error) {
 	return resp, nil
 }
 
-//Discirmination_Items   = utils.Packet{ 0xaa,0x55,0x2e,0x00,0x57,0x0a,0x81,0x25,0xe8,0x05,0x00,0xa2,0x01,0x00,0x00,0x00,0x00,0x02,0xe6,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x55,0xAA}
+// Discirmination_Items   = utils.Packet{ 0xaa,0x55,0x2e,0x00,0x57,0x0a,0x81,0x25,0xe8,0x05,0x00,0xa2,0x01,0x00,0x00,0x00,0x00,0x02,0xe6,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x55,0xAA}
 func (c *Character) SwapItems(where, to int16) ([]byte, error) {
 
 	sale := FindSale(c.PseudoID)

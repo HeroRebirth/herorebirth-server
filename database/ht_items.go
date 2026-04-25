@@ -40,7 +40,7 @@ func (e *HtItem) Delete() error {
 
 func getHTItems() error {
 	var htitems []*HtItem
-	query := `select * from data.ht_shop`
+	query := `select * from ht_shop`
 
 	if _, err := db.Select(&htitems, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -58,7 +58,7 @@ func getHTItems() error {
 
 func RefreshHTItems() error {
 	var htitems []*HtItem
-	query := `select * from data.ht_shop`
+	query := `select * from ht_shop`
 
 	if _, err := db.Select(&htitems, query); err != nil {
 		if err == sql.ErrNoRows {

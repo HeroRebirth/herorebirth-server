@@ -76,13 +76,17 @@ func (h *OpenHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	id := uint16(utils.BytesToInt(data[6:10], true))
+	id := uint16(utils.BytesToInt(data[6:8], true))
 	pos, ok := database.GetFromRegister(1, c.Map, id).(*database.NpcPosition)
 	if !ok {
 		return nil, nil
 	}
 
 	npc := database.NPCs[pos.NPCID]
+	if npc == nil {
+		log.Printf("OpenHandler: NPC not found for NPCID=%d", pos.NPCID)
+		return nil, nil
+	}
 
 	if npc.ID == 20147 { // Ice Palace Mistress Lord
 		coordinate := &utils.Location{X: 163, Y: 350}
@@ -179,6 +183,7 @@ func (h *OpenHandler) Handle(s *database.Socket, data []byte) ([]byte, error) {
 	}
 	npcScript := database.NPCScripts[npc.ID]
 	if npcScript == nil {
+		log.Printf("OpenHandler: no script for NPC ID=%d", npc.ID)
 		return nil, nil
 	}
 

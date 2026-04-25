@@ -38,7 +38,7 @@ func (e *Gate) Delete() error {
 
 func getGates() error {
 	var gates []*Gate
-	query := `select * from data.gates`
+	query := `select * from gates`
 
 	if _, err := db.Select(&gates, query); err != nil {
 		if err == sql.ErrNoRows {

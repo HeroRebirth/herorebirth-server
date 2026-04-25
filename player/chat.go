@@ -1571,8 +1571,8 @@ func cmdSpawnMobs(count, npcID, mapID int, coordinate string) {
 		MinLocation := fmt.Sprintf("%.1f,%.1f", minX, minY)
 		MaxLocation := fmt.Sprintf("%.1f,%.1f", maxX, maxY)
 
-		npcPos := &database.NpcPosition{ID: len(database.NPCPos), NPCID: int(npcID), MapID: int16(mapID), Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: MinLocation, MaxLocation: MaxLocation}
-		database.NPCPos = append(database.NPCPos, npcPos)
+		npcPos := &database.NpcPosition{ID: len(database.NPCPos) + 1, NPCID: int(npcID), MapID: int16(mapID), Rotation: 0, Attackable: true, IsNPC: false, RespawnTime: 30, Count: 30, MinLocation: MinLocation, MaxLocation: MaxLocation}
+		database.NPCPos[npcPos.ID] = npcPos
 		npcPos.Create()
 		npc, _ := database.NPCs[npcID]
 

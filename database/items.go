@@ -53,7 +53,7 @@ const (
 type Item struct {
 	ID              int64   `db:"id"`
 	Name            string  `db:"name"`
-	UIF             string  `db:"uif"`
+	UIF             sql.NullString  `db:"uif"`
 	Type            int16   `db:"type"`
 	HtType          int16   `db:"ht_type"`
 	TimerType       int16   `db:"timer_type"`
@@ -204,7 +204,7 @@ func (item *Item) GetType() int {
 
 func getAllItems() error {
 
-	query := `select * from data.items`
+	query := `select * from items`
 
 	items := []*Item{}
 
@@ -225,7 +225,7 @@ func getAllItems() error {
 
 func RefreshAllItems() error {
 
-	query := `select * from data.items`
+	query := `select * from items`
 
 	items := []*Item{}
 

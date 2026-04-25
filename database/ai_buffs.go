@@ -60,7 +60,7 @@ func (b *AiBuff) Update() error {
 func FindBuffByAIID(buffID, aiID int) (*AiBuff, error) {
 
 	var buff *AiBuff
-	query := `select * from hops.ai_buffs where id = $1 and ai_id = $2`
+	query := `select * from ai_buffs where id = ? and ai_id = ?`
 
 	if err := db.SelectOne(&buff, query, buffID, aiID); err != nil {
 		if err == sql.ErrNoRows {
@@ -74,7 +74,7 @@ func FindBuffByAIID(buffID, aiID int) (*AiBuff, error) {
 func FindBuffsByAiPseudoID(aiID uint16) ([]*AiBuff, error) {
 
 	var buffs []*AiBuff
-	query := `select * from hops.ai_buffs where ai_id = $1`
+	query := `select * from ai_buffs where ai_id = ?`
 
 	if _, err := db.Select(&buffs, query, aiID); err != nil {
 		if err == sql.ErrNoRows {
@@ -91,7 +91,7 @@ func FindBuffsByAiPseudoID(aiID uint16) ([]*AiBuff, error) {
 }
 
 func DeleteBuffsByAiPseudoID(aiID uint16) ([]*AiBuff, error) {
-	query := `DELETE from hops.ai_buffs where ai_id = $1`
+	query := `DELETE from ai_buffs where ai_id = ?`
 
 	_, err := db.Exec(query, aiID)
 	if err != nil {
@@ -102,7 +102,7 @@ func DeleteBuffsByAiPseudoID(aiID uint16) ([]*AiBuff, error) {
 }
 
 func DeleteBuffByAiPseudoID(aiID uint16, buffID int) ([]*AiBuff, error) {
-	query := `DELETE from hops.ai_buffs where id = $1 and ai_id = $2`
+	query := `DELETE from ai_buffs where id = ? and ai_id = ?`
 
 	_, err := db.Exec(query, buffID, aiID)
 	if err != nil {

@@ -6,10 +6,10 @@ go 1.13
 
 require (
 	github.com/go-redis/redis v6.15.8+incompatible
-	github.com/go-sql-driver/mysql v1.5.0 // indirect
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
-	github.com/lib/pq v1.7.0
+	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/nats-io/gnatsd v1.4.1
 	github.com/nats-io/nats.go v1.10.0

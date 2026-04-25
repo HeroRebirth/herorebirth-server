@@ -47,7 +47,7 @@ func (p *JobPassive) Delete() error {
 
 func getJobPassives() error {
 	var passives []*JobPassive
-	query := `select * from data.job_passives`
+	query := `select * from job_passives`
 
 	if _, err := db.Select(&passives, query); err != nil {
 		if err == sql.ErrNoRows {

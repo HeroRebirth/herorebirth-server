@@ -24,7 +24,7 @@ func (b *FiveClan) Update() error {
 
 func getFiveAreas() error {
 	var areas []*FiveClan
-	query := `select * from data.fiveclan_war`
+	query := `select * from fiveclan_war`
 
 	if _, err := db.Select(&areas, query); err != nil {
 		if err == sql.ErrNoRows {

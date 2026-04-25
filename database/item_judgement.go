@@ -53,7 +53,7 @@ func (e *ItemJudgement) Update() error {
 
 func getItemJudgements() error {
 	var Itemjudgements []*ItemJudgement
-	query := `select * from data.item_judgement`
+	query := `select * from item_judgement`
 
 	if _, err := db.Select(&Itemjudgements, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -71,7 +71,7 @@ func getItemJudgements() error {
 
 func RefresItemJudgements() error {
 	var itemJudgements []*ItemJudgement
-	query := `select * from data.item_judgement`
+	query := `select * from item_judgement`
 
 	if _, err := db.Select(&itemJudgements, query); err != nil {
 		if err == sql.ErrNoRows {

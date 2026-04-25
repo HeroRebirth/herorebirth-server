@@ -42,7 +42,7 @@ func (e *ExpInfo) Delete() error {
 func getExps() error {
 
 	var arr []*ExpInfo
-	query := `select * from data.exp_table`
+	query := `select * from exp_table`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {
@@ -60,7 +60,7 @@ func getExps() error {
 func GetExps() error {
 
 	var arr []*ExpInfo
-	query := `select * from data.exp_table`
+	query := `select * from exp_table`
 
 	if _, err := db.Select(&arr, query); err != nil {
 		if err == sql.ErrNoRows {

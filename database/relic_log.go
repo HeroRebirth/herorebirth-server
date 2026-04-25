@@ -23,7 +23,7 @@ func (e *RelicLog) Create() error {
 
 func getRelicLog() error {
 	var relics []*RelicLog
-	query := `SELECT * FROM data.relic_log WHERE drop_time >= now()::date + interval '0 hour';`
+	query := `SELECT * FROM relic_log WHERE drop_time >= CURDATE()`
 
 	if _, err := db.Select(&relics, query); err != nil {
 		if err == sql.ErrNoRows {
